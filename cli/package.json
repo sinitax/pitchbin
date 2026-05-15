@@ -1,10 +1,25 @@
 {
   "name": "pitchbin",
   "version": "0.1.0",
-  "description": "CLI for submitting to pitchbin.xyz",
+  "description": "Share rendered markdown pages via pitchbin.xyz. One command, one URL.",
   "bin": {
-    "pitchbin": "./pitchbin.mjs"
+    "pitchbin": "pitchbin.mjs"
   },
   "type": "module",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sinitax/pitchbin.git"
+  },
+  "keywords": [
+    "pitchbin",
+    "pastebin",
+    "markdown",
+    "share",
+    "agent",
+    "cli"
+  ],
+  "files": [
+    "pitchbin.mjs"
+  ]
 }
