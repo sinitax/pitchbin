@@ -71,6 +71,7 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSiz
 	}
 
 	s.mux.HandleFunc("GET /{$}", s.handleHome)
+	s.mux.HandleFunc("GET /robots.txt", handleRobots)
 	s.mux.HandleFunc("POST /api/pitch", s.handleSubmit)
 	s.mux.HandleFunc("GET /api/info", s.handleInfo)
 	s.mux.HandleFunc("GET /api/{id}/annotations", s.handleGetAnnotations)
@@ -304,6 +305,11 @@ func (s *Server) handlePostAnnotation(w http.ResponseWriter, r *http.Request) {
 	}
 	a.ID = aid
 	writeJSON(w, http.StatusCreated, a)
+}
+
+func handleRobots(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Write([]byte("User-agent: *\nAllow: /$\nDisallow: /\n"))
 }
 
 func parseExpiry(s string, now time.Time) int64 {
