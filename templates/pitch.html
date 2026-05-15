@@ -64,35 +64,31 @@ body {
 .meta a { color: inherit; text-decoration: none; }
 .meta a:hover { text-decoration: underline; }
 
-.name-badge {
-  position: absolute;
-  top: 0;
-  right: 0;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
+.annotation-card.editable { cursor: pointer; }
+.annotation-card.editable:hover { border-left-color: #0066cc; }
 
-.name-badge:hover, .name-badge:focus-within { opacity: 1; }
-
-.name-badge input {
+.ann-edit-form { display: flex; flex-direction: column; gap: 0.3rem; }
+.ann-edit-form input, .ann-edit-form textarea {
+  font-family: inherit;
   font-size: 0.8rem;
   border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 0.25rem 0.5rem;
-  width: 140px;
-  background: #fff;
-  color: #333;
+  border-radius: 3px;
+  padding: 0.25rem 0.4rem;
   outline: none;
-  text-align: right;
 }
-
-.name-badge input:focus { border-color: #999; }
-
-.name-badge input::placeholder { color: #bbb; }
-
-/* When name is set, show a subtle indicator */
-.name-badge.has-name { opacity: 0.4; }
-.name-badge.has-name:hover { opacity: 1; }
+.ann-edit-form input:focus, .ann-edit-form textarea:focus { border-color: #999; }
+.ann-edit-form textarea { min-height: 40px; resize: vertical; }
+.ann-edit-actions { display: flex; gap: 0.3rem; justify-content: flex-end; }
+.ann-edit-actions button {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+}
+.ann-edit-actions button.save { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.ann-edit-actions button.save:hover { background: #333; }
 
 .content h1 { font-size: 1.5rem; margin: 2rem 0 0.75rem; font-weight: 600; }
 .content h2 { font-size: 1.3rem; margin: 1.75rem 0 0.6rem; font-weight: 600; }
@@ -300,9 +296,6 @@ footer a:hover { color: #666; }
         <span>{{.Views}} view{{if ne .Views 1}}s{{end}}</span>
         {{if .Expires}}<span>expires {{.Expires.Format "Jan 2, 2006"}}</span>{{end}}
       </div>
-      {{if not .Readonly}}<div class="name-badge" id="name-badge">
-        <input type="text" id="reviewer-name" placeholder="your name" autocomplete="off">
-      </div>{{end}}
     </div>
 
     <div class="content" id="content">{{.HTML}}</div>
@@ -337,20 +330,7 @@ footer a:hover { color: #666; }
   if (!READONLY) {
     const popup = document.getElementById('comment-popup');
     const commentText = document.getElementById('comment-text');
-    const nameInput = document.getElementById('reviewer-name');
-    const nameBadge = document.getElementById('name-badge');
 
-    // Name persistence
-    const savedName = localStorage.getItem('pitchbin-name') || '';
-    nameInput.value = savedName;
-    if (savedName) nameBadge.classList.add('has-name');
-
-    nameInput.addEventListener('input', function() {
-      localStorage.setItem('pitchbin-name', this.value);
-      nameBadge.classList.toggle('has-name', this.value.length > 0);
-    });
-
-    // Get text offset within content element
     function getTextOffset(container, node, offset) {
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
       let pos = 0;
@@ -361,7 +341,6 @@ footer a:hover { color: #666; }
       return pos;
     }
 
-    // Handle text selection
     contentEl.addEventListener('mouseup', function(e) {
       if (e.target.classList && e.target.classList.contains('annotation-hl')) return;
 
@@ -415,7 +394,7 @@ footer a:hover { color: #666; }
       if (!pendingSelection || !commentText.value.trim()) return;
 
       const body = {
-        author: nameInput.value.trim(),
+        author: localStorage.getItem('pitchbin-name') || '',
         comment: commentText.value.trim(),
         quote: pendingSelection.quote,
         text_start: pendingSelection.textStart,
@@ -437,22 +416,7 @@ footer a:hover { color: #666; }
     };
   }
 
-  // Find text node and offset from a character position
-  function findNodeAtOffset(container, targetOffset) {
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-    let pos = 0;
-    while (walker.nextNode()) {
-      const len = walker.currentNode.textContent.length;
-      if (pos + len > targetOffset) {
-        return { node: walker.currentNode, offset: targetOffset - pos };
-      }
-      pos += len;
-    }
-    return null;
-  }
-
   function highlightRange(textStart, textEnd, annotationId) {
-    // Collect all text nodes in range and wrap each segment in a <mark>
     const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
     let pos = 0;
     const segments = [];
@@ -474,7 +438,6 @@ footer a:hover { color: #666; }
 
     segments.forEach(function(seg) {
       const text = seg.node;
-      // Split: [before][highlighted][after]
       const before = text.textContent.substring(0, seg.from);
       const mid = text.textContent.substring(seg.from, seg.to);
       const after = text.textContent.substring(seg.to);
@@ -493,6 +456,66 @@ footer a:hover { color: #666; }
         parent.removeChild(text);
       }
     });
+  }
+
+  function editAnnotation(card, a) {
+    const truncQuote = a.quote.length > 50 ? a.quote.slice(0, 50) + '...' : a.quote;
+    card.innerHTML =
+      '<div class="ann-edit-form">' +
+        '<input type="text" class="edit-author" value="' + escAttr(a.author) + '" placeholder="your name">' +
+        '<div class="ann-quote">"' + escHtml(truncQuote) + '"</div>' +
+        '<textarea class="edit-comment">' + escHtml(a.comment) + '</textarea>' +
+        '<div class="ann-edit-actions">' +
+          '<button class="cancel">Cancel</button>' +
+          '<button class="save">Save</button>' +
+        '</div>' +
+      '</div>';
+
+    const authorInput = card.querySelector('.edit-author');
+    const commentInput = card.querySelector('.edit-comment');
+
+    card.querySelector('.cancel').addEventListener('click', function(e) {
+      e.stopPropagation();
+      renderAnnotations();
+    });
+
+    card.querySelector('.save').addEventListener('click', function(e) {
+      e.stopPropagation();
+      const newAuthor = authorInput.value.trim();
+      const newComment = commentInput.value.trim();
+      if (!newComment) return;
+
+      fetch('/api/' + PITCH_ID + '/annotations/' + a.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: newAuthor, comment: newComment }),
+      })
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function() {
+        // If author changed, update all own annotations
+        const oldAuthor = a.author;
+        if (newAuthor !== oldAuthor) {
+          annotations.forEach(function(ann) {
+            if (ann.editable && ann.author === oldAuthor) ann.author = newAuthor;
+          });
+          localStorage.setItem('pitchbin-name', newAuthor);
+        }
+        a.comment = newComment;
+        a.author = newAuthor;
+        renderAnnotations();
+      })
+      .catch(() => renderAnnotations());
+    });
+
+    commentInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        card.querySelector('.save').click();
+      }
+      if (e.key === 'Escape') renderAnnotations();
+    });
+
+    commentInput.focus();
   }
 
   function renderAnnotations() {
@@ -523,7 +546,7 @@ footer a:hover { color: #666; }
       if (topPos < lastCardBottom + 8) topPos = lastCardBottom + 8;
 
       const card = document.createElement('div');
-      card.className = 'annotation-card';
+      card.className = 'annotation-card' + (a.editable ? ' editable' : '');
       card.style.top = topPos + 'px';
 
       const authorName = a.author || 'anonymous';
@@ -535,6 +558,10 @@ footer a:hover { color: #666; }
         '<div class="ann-quote">"' + escHtml(truncQuote) + '"</div>' +
         '<div class="ann-comment">' + escHtml(a.comment) + '</div>' +
         '<div class="ann-time">' + timeStr + '</div>';
+
+      if (a.editable && !READONLY) {
+        card.addEventListener('click', function() { editAnnotation(card, a); });
+      }
 
       if (mark) {
         card.addEventListener('mouseenter', () => mark.style.background = '#ffe566');
@@ -552,6 +579,10 @@ footer a:hover { color: #666; }
     const d = document.createElement('div');
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  function escAttr(s) {
+    return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
   // Load annotations

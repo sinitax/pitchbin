@@ -1,12 +1,15 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"html/template"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -76,6 +79,7 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSiz
 	s.mux.HandleFunc("GET /api/info", s.handleInfo)
 	s.mux.HandleFunc("GET /api/{id}/annotations", s.handleGetAnnotations)
 	s.mux.HandleFunc("POST /api/{id}/annotations", s.handlePostAnnotation)
+	s.mux.HandleFunc("PUT /api/{id}/annotations/{aid}", s.handleUpdateAnnotation)
 	s.mux.HandleFunc("GET /{id}/raw", s.handleRaw)
 	s.mux.HandleFunc("GET /{id}", s.handleView)
 
@@ -251,8 +255,28 @@ func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(pitch.Markdown))
 }
 
+func getSession(w http.ResponseWriter, r *http.Request) string {
+	if c, err := r.Cookie("pitchbin_session"); err == nil && c.Value != "" {
+		return c.Value
+	}
+	b := make([]byte, 16)
+	rand.Read(b)
+	sess := hex.EncodeToString(b)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "pitchbin_session",
+		Value:    sess,
+		Path:     "/",
+		MaxAge:   365 * 24 * 3600,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	return sess
+}
+
 func (s *Server) handleGetAnnotations(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	sess := getSession(w, r)
+
 	annotations, err := s.store.GetAnnotations(id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
@@ -261,11 +285,17 @@ func (s *Server) handleGetAnnotations(w http.ResponseWriter, r *http.Request) {
 	if annotations == nil {
 		annotations = []Annotation{}
 	}
+
+	for i := range annotations {
+		annotations[i].Editable = annotations[i].Session == sess
+	}
+
 	writeJSON(w, http.StatusOK, annotations)
 }
 
 func (s *Server) handlePostAnnotation(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	sess := getSession(w, r)
 
 	if !s.store.PitchExists(id) {
 		http.NotFound(w, r)
@@ -290,6 +320,7 @@ func (s *Server) handlePostAnnotation(w http.ResponseWriter, r *http.Request) {
 
 	a := &Annotation{
 		PitchID:   id,
+		Session:   sess,
 		Author:    req.Author,
 		Comment:   req.Comment,
 		Quote:     req.Quote,
@@ -304,7 +335,58 @@ func (s *Server) handlePostAnnotation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.ID = aid
+	a.Editable = true
 	writeJSON(w, http.StatusCreated, a)
+}
+
+func (s *Server) handleUpdateAnnotation(w http.ResponseWriter, r *http.Request) {
+	sess := getSession(w, r)
+	aidStr := r.PathValue("aid")
+	aid, err := strconv.ParseInt(aidStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid annotation id"})
+		return
+	}
+
+	a, err := s.store.GetAnnotation(aid)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	if a.Session != sess {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your annotation"})
+		return
+	}
+
+	var req struct {
+		Author  string `json:"author"`
+		Comment string `json:"comment"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	// If author name changed, update all annotations by this session on this pitch
+	if req.Author != a.Author {
+		s.store.UpdateAuthorBySession(a.PitchID, sess, req.Author)
+	}
+
+	if req.Comment != "" {
+		s.store.UpdateAnnotation(aid, req.Author, req.Comment)
+	}
+
+	a.Author = req.Author
+	if req.Comment != "" {
+		a.Comment = req.Comment
+	}
+	a.Editable = true
+	writeJSON(w, http.StatusOK, a)
 }
 
 func handleRobots(w http.ResponseWriter, r *http.Request) {
