@@ -16,7 +16,7 @@ function parseArgs() {
     url: process.env.PITCHBIN_URL || "https://pitchbin.xyz",
     title: "",
     author: "",
-    expires: "30d",
+    expires: "",
     bits: 20,
     private: false,
     file: null,
@@ -31,7 +31,7 @@ Options:
   --url URL        Pitchbin server URL (or PITCHBIN_URL env)
   --title TEXT     Pitch title
   --author TEXT    Author name
-  --expires SPEC   Expiry: 7d, 30d, 90d, permanent (default: 30d)
+  --expires SPEC   Expiry: 7d, 30d, 90d (default: permanent)
   --private        Add random suffix to URL (unguessable)
   --bits N         PoW difficulty override (default: auto-detect from server)
   -                Read markdown from stdin`);

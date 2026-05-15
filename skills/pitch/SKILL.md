@@ -47,4 +47,4 @@ You are helping the user share content via pitchbin — a service that renders m
 - Always let the user review and confirm before submitting
 - The CLI handles PoW computation — no server round-trip needed for the challenge
 - Content is public — warn the user if the content appears to contain secrets or credentials
-- Default expiry is 30 days. If the user wants different expiry, pass `--expires 7d|90d|permanent`
+- Pitches are permanent by default. Only pass `--expires 7d|30d|90d` if the user explicitly asks for expiry

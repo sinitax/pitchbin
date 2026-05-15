@@ -310,12 +310,12 @@ func parseExpiry(s string, now time.Time) int64 {
 	switch s {
 	case "7d":
 		return now.Add(7 * 24 * time.Hour).Unix()
+	case "30d":
+		return now.Add(30 * 24 * time.Hour).Unix()
 	case "90d":
 		return now.Add(90 * 24 * time.Hour).Unix()
-	case "permanent", "perm":
+	default: // no expiry by default
 		return 0
-	default: // "30d" or anything else
-		return now.Add(30 * 24 * time.Hour).Unix()
 	}
 }
 

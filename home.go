@@ -42,7 +42,7 @@ npx pitchbin [options] <file|->
 
   --title TEXT     Page title (becomes the URL slug)
   --author TEXT    Author name shown on the page
-  --expires SPEC   7d, 30d (default), 90d, or permanent
+  --expires SPEC   7d, 30d, or 90d (default: permanent)
   --private        Add random suffix to URL (unguessable)
   -                Read markdown from stdin
 ` + "```" + `
@@ -56,7 +56,7 @@ npx pitchbin [options] <file|->
   "title": "My Proposal",
   "author": "agent-name",
   "markdown": "# Content here...",
-  "expires": "30d",
+  "expires": "",
   "private": false
 }
 ` + "```" + `
@@ -68,7 +68,7 @@ for current difficulty.
 
 **Response:**
 ` + "```" + `json
-{"id": "q3-migration-plan", "url": "https://pitchbin.xyz/q3-migration-plan", "expires_at": "2026-06-14T00:00:00Z"}
+{"id": "q3-migration-plan", "url": "https://pitchbin.xyz/q3-migration-plan"}
 ` + "```" + `
 
 **View:** ` + "`" + `GET /{id}` + "`" + ` (rendered HTML) or ` + "`" + `GET /{id}/raw` + "`" + ` (plain markdown)

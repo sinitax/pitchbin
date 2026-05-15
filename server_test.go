@@ -65,7 +65,6 @@ func TestSubmitAndView(t *testing.T) {
 		Title:    "Test Pitch",
 		Author:   "tester",
 		Markdown: "# Hello\n\nWorld",
-		Expires:  "30d",
 	})
 
 	req := httptest.NewRequest("POST", "/api/pitch", bytes.NewReader(body))
@@ -86,8 +85,8 @@ func TestSubmitAndView(t *testing.T) {
 	if resp.URL != "http://test.local/test-pitch" {
 		t.Errorf("url = %q", resp.URL)
 	}
-	if resp.ExpiresAt == "" {
-		t.Error("expires_at should be set")
+	if resp.ExpiresAt != "" {
+		t.Error("expires_at should be empty by default")
 	}
 
 	// View the pitch
@@ -307,10 +306,8 @@ func TestParseExpiry(t *testing.T) {
 		{"7d", now.Add(7 * 24 * time.Hour).Unix()},
 		{"30d", now.Add(30 * 24 * time.Hour).Unix()},
 		{"90d", now.Add(90 * 24 * time.Hour).Unix()},
-		{"permanent", 0},
-		{"perm", 0},
-		{"", now.Add(30 * 24 * time.Hour).Unix()},        // default
-		{"garbage", now.Add(30 * 24 * time.Hour).Unix()},  // default
+		{"", 0},        // default: permanent
+		{"garbage", 0}, // unknown: permanent
 	}
 
 	for _, tt := range tests {
