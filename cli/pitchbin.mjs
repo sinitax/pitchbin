@@ -29,7 +29,7 @@ function parseArgs() {
 
 Options:
   --url URL        Pitchbin server URL (or PITCHBIN_URL env)
-  --title TEXT     Pitch title
+  --title TEXT     Pitch title (default: parsed from first # heading)
   --author TEXT    Author name
   --expires SPEC   Expiry: 7d, 30d, 90d (default: permanent)
   --private        Add random suffix to URL (unguessable)
@@ -113,6 +113,12 @@ async function submit(url, stamp, markdown, title, author, expires, isPrivate) {
 async function main() {
   const opts = parseArgs();
   const markdown = readMarkdown(opts.file);
+
+  // Extract title from first heading if not provided
+  if (!opts.title) {
+    const match = markdown.match(/^#\s+(.+)$/m);
+    if (match) opts.title = match[1].trim();
+  }
 
   // Auto-detect difficulty from server
   let bits = opts.bits;
