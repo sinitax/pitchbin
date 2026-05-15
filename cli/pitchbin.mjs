@@ -13,11 +13,12 @@ function die(msg) {
 function parseArgs() {
   const args = process.argv.slice(2);
   const opts = {
-    url: process.env.PITCHBIN_URL || "https://pitchbin.io",
+    url: process.env.PITCHBIN_URL || "https://pitchbin.xyz",
     title: "",
     author: "",
     expires: "30d",
     bits: 20,
+    private: false,
     file: null,
   };
 
@@ -31,6 +32,7 @@ Options:
   --title TEXT     Pitch title
   --author TEXT    Author name
   --expires SPEC   Expiry: 7d, 30d, 90d, permanent (default: 30d)
+  --private        Add random suffix to URL (unguessable)
   --bits N         PoW difficulty override (default: auto-detect from server)
   -                Read markdown from stdin`);
         process.exit(0);
@@ -39,6 +41,7 @@ Options:
       case "--author": opts.author = args[++i]; break;
       case "--expires": opts.expires = args[++i]; break;
       case "--bits": opts.bits = parseInt(args[++i], 10); break;
+      case "-p": case "--private": opts.private = true; break;
       default:
         if (args[i].startsWith("-") && args[i] !== "-") die(`unknown flag: ${args[i]}`);
         opts.file = args[i];
@@ -95,11 +98,11 @@ async function fetchInfo(url) {
   return resp.json();
 }
 
-async function submit(url, stamp, markdown, title, author, expires) {
+async function submit(url, stamp, markdown, title, author, expires, isPrivate) {
   const resp = await fetch(`${url}/api/pitch`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ stamp, markdown, title, author, expires }),
+    body: JSON.stringify({ stamp, markdown, title, author, expires, private: isPrivate }),
   });
 
   const body = await resp.json();
@@ -121,7 +124,7 @@ async function main() {
   }
 
   const stamp = computeStamp(bits);
-  const result = await submit(opts.url, stamp, markdown, opts.title, opts.author, opts.expires);
+  const result = await submit(opts.url, stamp, markdown, opts.title, opts.author, opts.expires, opts.private);
 
   // Output just the URL to stdout (for piping)
   console.log(result.url);

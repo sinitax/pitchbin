@@ -32,6 +32,7 @@ type pitchRequest struct {
 	Author   string `json:"author"`
 	Markdown string `json:"markdown"`
 	Expires  string `json:"expires"`
+	Private  bool   `json:"private"`
 }
 
 type pitchResponse struct {
@@ -140,17 +141,9 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate ID
-	var id string
-	for range 3 {
-		id, err = GenerateID()
-		if err != nil {
-			continue
-		}
-		if !s.store.PitchExists(id) {
-			break
-		}
-	}
-	if id == "" {
+	id, err := GenerateID(s.store, req.Title, req.Private)
+	if err != nil {
+		log.Printf("id generation error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate ID"})
 		return
 	}

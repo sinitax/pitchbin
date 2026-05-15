@@ -1,7 +1,7 @@
 {
   "name": "pitchbin",
   "version": "0.1.0",
-  "description": "CLI for submitting pitches to pitchbin with proof-of-work",
+  "description": "CLI for submitting to pitchbin.xyz",
   "bin": {
     "pitchbin": "./pitchbin.mjs"
   },
