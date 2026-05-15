@@ -450,20 +450,47 @@ footer a:hover { color: #666; }
   }
 
   function highlightRange(textStart, textEnd, annotationId) {
-    const start = findNodeAtOffset(contentEl, textStart);
-    const end = findNodeAtOffset(contentEl, textEnd);
-    if (!start || !end) return;
+    // Collect all text nodes in range and wrap each segment in a <mark>
+    const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
+    let pos = 0;
+    const segments = [];
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const len = node.textContent.length;
+      const nodeStart = pos;
+      const nodeEnd = pos + len;
+      if (nodeEnd > textStart && nodeStart < textEnd) {
+        segments.push({
+          node: node,
+          from: Math.max(0, textStart - nodeStart),
+          to: Math.min(len, textEnd - nodeStart),
+        });
+      }
+      pos += len;
+      if (pos >= textEnd) break;
+    }
 
-    try {
-      const range = document.createRange();
-      range.setStart(start.node, start.offset);
-      range.setEnd(end.node, end.offset);
+    segments.forEach(function(seg) {
+      const text = seg.node;
+      // Split: [before][highlighted][after]
+      const before = text.textContent.substring(0, seg.from);
+      const mid = text.textContent.substring(seg.from, seg.to);
+      const after = text.textContent.substring(seg.to);
 
       const mark = document.createElement('mark');
       mark.className = 'annotation-hl';
       mark.dataset.annotationId = annotationId;
-      range.surroundContents(mark);
-    } catch(e) {}
+      mark.textContent = mid;
+
+      const parent = text.parentNode;
+      if (after) parent.insertBefore(document.createTextNode(after), text.nextSibling);
+      parent.insertBefore(mark, text.nextSibling);
+      if (before) {
+        text.textContent = before;
+      } else {
+        parent.removeChild(text);
+      }
+    });
   }
 
   function renderAnnotations() {
