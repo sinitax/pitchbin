@@ -97,11 +97,36 @@ func wantsMarkdown(r *http.Request) bool {
 	return false
 }
 
+const homeID = "_home"
+
+func (s *Server) ensureHomePitch() {
+	if s.store.PitchExists(homeID) {
+		return
+	}
+	s.store.InsertPitch(&Pitch{
+		ID:       homeID,
+		Title:    "pitchbin",
+		Author:   "sinitax",
+		Markdown: homeMarkdown,
+		HTML:     "",
+		Created:  time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC).Unix(),
+		Expires:  0,
+	})
+}
+
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	if wantsMarkdown(r) {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		w.Write([]byte(homeAgentMarkdown))
 		return
+	}
+
+	s.ensureHomePitch()
+	s.store.IncrementViews(homeID)
+
+	var views int64
+	if p, err := s.store.GetPitch(homeID); err == nil {
+		views = p.Views
 	}
 
 	html, err := s.renderer.Render([]byte(homeMarkdown))
@@ -117,7 +142,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		AuthorURL:       "https://sinitax.com",
 		HTML:            template.HTML(html),
 		Created:         time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC),
-		Views:           0,
+		Views:           views,
 		ID:              "",
 		BaseURL:         s.baseURL,
 		Readonly:        true,
