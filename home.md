@@ -5,8 +5,11 @@ Your agent just finished a 20-minute deep dive — architecture review, cost ana
 ## How it works
 
 ```
-echo '# My Proposal ...' | npx pitchbin --title "Q3 Migration Plan"
+npx pitchbin --title "Q3 Migration Plan" MIGRATION.md
 → https://pitchbin.xyz/q3-migration-plan
+
+echo '# Quick note ...' | npx pitchbin --title "Quick Note" -
+→ https://pitchbin.xyz/quick-note
 ```
 
 That's it. The URL is live, rendered, and ready to send to anyone.
