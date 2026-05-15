@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -18,10 +19,18 @@ func main() {
 	baseURL := flag.String("base-url", "", "public base URL (e.g. https://pitchbin.io)")
 	powBits := flag.Int("pow-bits", 20, "proof-of-work difficulty in leading zero bits")
 	maxSize := flag.Int("max-size", 512000, "max markdown size in bytes")
+	rateLimit := flag.Int("rate-limit", 5, "submissions per minute per IP")
 	flag.Parse()
 
 	if *baseURL == "" {
-		*baseURL = fmt.Sprintf("http://localhost%s", *addr)
+		host, port := *addr, ""
+		if i := strings.LastIndex(*addr, ":"); i >= 0 {
+			host, port = (*addr)[:i], (*addr)[i:]
+		}
+		if host == "" || host == "0.0.0.0" || host == "::" {
+			host = "localhost"
+		}
+		*baseURL = fmt.Sprintf("http://%s%s", host, port)
 	}
 
 	store, err := NewStore(*dbPath)
@@ -32,7 +41,7 @@ func main() {
 
 	renderer := NewRenderer()
 
-	srv := NewServer(store, renderer, *baseURL, *powBits, *maxSize)
+	srv := NewServer(store, renderer, *baseURL, *powBits, *maxSize, *rateLimit)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

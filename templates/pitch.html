@@ -16,10 +16,25 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+.page {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  position: relative;
+}
+
 .container {
   max-width: 720px;
-  margin: 0 auto;
+  width: 720px;
+  min-width: 0;
   padding: 2rem 1.5rem 4rem;
+}
+
+.annotations-gutter {
+  width: 280px;
+  flex-shrink: 0;
+  position: relative;
+  padding: 0 1rem;
 }
 
 .meta {
@@ -28,6 +43,7 @@ body {
   margin-bottom: 2rem;
   color: #666;
   font-size: 0.85rem;
+  position: relative;
 }
 
 .meta h1 {
@@ -45,6 +61,36 @@ body {
 }
 
 .meta-row span { white-space: nowrap; }
+
+.name-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.name-badge:hover, .name-badge:focus-within { opacity: 1; }
+
+.name-badge input {
+  font-size: 0.8rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  width: 140px;
+  background: #fff;
+  color: #333;
+  outline: none;
+  text-align: right;
+}
+
+.name-badge input:focus { border-color: #999; }
+
+.name-badge input::placeholder { color: #bbb; }
+
+/* When name is set, show a subtle indicator */
+.name-badge.has-name { opacity: 0.4; }
+.name-badge.has-name:hover { opacity: 1; }
 
 .content h1 { font-size: 1.5rem; margin: 2rem 0 0.75rem; font-weight: 600; }
 .content h2 { font-size: 1.3rem; margin: 1.75rem 0 0.6rem; font-weight: 600; }
@@ -111,6 +157,110 @@ body {
 
 .content input[type="checkbox"] { margin-right: 0.4rem; }
 
+mark.annotation-hl {
+  background: #fff3b0;
+  border-bottom: 2px solid #e6c300;
+  padding: 0 1px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+mark.annotation-hl:hover { background: #ffe566; }
+
+/* Annotation cards in gutter */
+.annotation-card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-left: 3px solid #e6c300;
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: box-shadow 0.15s;
+}
+
+.annotation-card:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+
+.annotation-card .ann-author {
+  font-weight: 600;
+  color: #555;
+  font-size: 0.75rem;
+  margin-bottom: 0.15rem;
+}
+
+.annotation-card .ann-quote {
+  color: #888;
+  font-size: 0.7rem;
+  font-style: italic;
+  margin-bottom: 0.3rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotation-card .ann-comment { color: #333; }
+
+.annotation-card .ann-time {
+  color: #aaa;
+  font-size: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+/* Comment input popup */
+.comment-popup {
+  position: absolute;
+  z-index: 100;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.6rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  width: 260px;
+  display: none;
+}
+
+.comment-popup textarea {
+  width: 100%;
+  min-height: 60px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0.4rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  resize: vertical;
+  outline: none;
+}
+
+.comment-popup textarea:focus { border-color: #999; }
+
+.comment-popup .popup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.comment-popup button {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+}
+
+.comment-popup button.primary {
+  background: #1a1a1a;
+  color: #fff;
+  border-color: #1a1a1a;
+}
+
+.comment-popup button.primary:hover { background: #333; }
+
 footer {
   margin-top: 3rem;
   padding-top: 1rem;
@@ -126,6 +276,10 @@ footer {
 footer a { color: #999; text-decoration: none; }
 footer a:hover { color: #666; }
 
+@media (max-width: 1100px) {
+  .annotations-gutter { display: none; }
+}
+
 @media (max-width: 600px) {
   .container { padding: 1rem; }
   .meta h1 { font-size: 1.4rem; }
@@ -134,25 +288,265 @@ footer a:hover { color: #666; }
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="meta">
-    {{if .Title}}<h1>{{.Title}}</h1>{{end}}
-    <div class="meta-row">
-      {{if .Author}}<span>by {{.Author}}</span>{{end}}
-      <span>{{.Created.Format "Jan 2, 2006"}}</span>
-      <span>{{.Views}} view{{if ne .Views 1}}s{{end}}</span>
-      {{if .Expires}}<span>expires {{.Expires.Format "Jan 2, 2006"}}</span>{{end}}
+<div class="page">
+  <div class="container">
+    <div class="meta">
+      {{if .Title}}<h1>{{.Title}}</h1>{{end}}
+      <div class="meta-row">
+        {{if .Author}}<span>by {{.Author}}</span>{{end}}
+        <span>{{.Created.Format "Jan 2, 2006"}}</span>
+        <span>{{.Views}} view{{if ne .Views 1}}s{{end}}</span>
+        {{if .Expires}}<span>expires {{.Expires.Format "Jan 2, 2006"}}</span>{{end}}
+      </div>
+      <div class="name-badge" id="name-badge">
+        <input type="text" id="reviewer-name" placeholder="your name" autocomplete="off">
+      </div>
     </div>
+
+    <div class="content" id="content">
+      {{.HTML}}
+    </div>
+
+    <footer>
+      <span><a href="{{.BaseURL}}">pitchbin</a></span>
+      <span><a href="{{.RawURL}}">raw</a></span>
+    </footer>
   </div>
 
-  <div class="content">
-    {{.HTML}}
-  </div>
-
-  <footer>
-    <span><a href="{{.BaseURL}}">pitchbin</a></span>
-    <span><a href="{{.RawURL}}">raw</a></span>
-  </footer>
+  <div class="annotations-gutter" id="gutter"></div>
 </div>
+
+<div class="comment-popup" id="comment-popup">
+  <textarea id="comment-text" placeholder="Add a comment..."></textarea>
+  <div class="popup-actions">
+    <button onclick="closePopup()">Cancel</button>
+    <button class="primary" onclick="submitComment()">Comment</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  const PITCH_ID = {{.ID}};
+  const contentEl = document.getElementById('content');
+  const gutterEl = document.getElementById('gutter');
+  const popup = document.getElementById('comment-popup');
+  const commentText = document.getElementById('comment-text');
+  const nameInput = document.getElementById('reviewer-name');
+  const nameBadge = document.getElementById('name-badge');
+
+  let pendingSelection = null;
+  let annotations = [];
+
+  // Name persistence
+  const savedName = localStorage.getItem('pitchbin-name') || '';
+  nameInput.value = savedName;
+  if (savedName) nameBadge.classList.add('has-name');
+
+  nameInput.addEventListener('input', function() {
+    localStorage.setItem('pitchbin-name', this.value);
+    nameBadge.classList.toggle('has-name', this.value.length > 0);
+  });
+
+  // Get text offset within content element
+  function getTextOffset(container, node, offset) {
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let pos = 0;
+    while (walker.nextNode()) {
+      if (walker.currentNode === node) return pos + offset;
+      pos += walker.currentNode.textContent.length;
+    }
+    return pos;
+  }
+
+  // Find text node and offset from a character position
+  function findNodeAtOffset(container, targetOffset) {
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let pos = 0;
+    while (walker.nextNode()) {
+      const len = walker.currentNode.textContent.length;
+      if (pos + len > targetOffset) {
+        return { node: walker.currentNode, offset: targetOffset - pos };
+      }
+      pos += len;
+    }
+    return null;
+  }
+
+  // Handle text selection
+  contentEl.addEventListener('mouseup', function(e) {
+    // Don't trigger on clicks on existing highlights
+    if (e.target.classList && e.target.classList.contains('annotation-hl')) return;
+
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+
+    const range = sel.getRangeAt(0);
+    if (!contentEl.contains(range.startContainer) || !contentEl.contains(range.endContainer)) return;
+
+    const quote = sel.toString().trim();
+    if (!quote || quote.length < 2) return;
+
+    const textStart = getTextOffset(contentEl, range.startContainer, range.startOffset);
+    const textEnd = getTextOffset(contentEl, range.endContainer, range.endOffset);
+
+    // Position popup near end of selection
+    const rects = range.getClientRects();
+    const lastRect = rects[rects.length - 1];
+
+    pendingSelection = { quote, textStart, textEnd };
+
+    popup.style.display = 'block';
+    popup.style.left = Math.min(lastRect.right + 8, window.innerWidth - 280) + 'px';
+    popup.style.top = (lastRect.bottom + window.scrollY + 4) + 'px';
+    commentText.value = '';
+    commentText.focus();
+  });
+
+  // Close popup on click outside
+  document.addEventListener('mousedown', function(e) {
+    if (!popup.contains(e.target) && popup.style.display === 'block') {
+      // Small delay to let mouseup on content fire first
+      setTimeout(function() {
+        if (!popup.contains(document.activeElement)) closePopup();
+      }, 150);
+    }
+  });
+
+  // Keyboard shortcut
+  commentText.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      submitComment();
+    }
+    if (e.key === 'Escape') closePopup();
+  });
+
+  window.closePopup = function() {
+    popup.style.display = 'none';
+    pendingSelection = null;
+    window.getSelection().removeAllRanges();
+  };
+
+  window.submitComment = function() {
+    if (!pendingSelection || !commentText.value.trim()) return;
+
+    const body = {
+      author: nameInput.value.trim(),
+      comment: commentText.value.trim(),
+      quote: pendingSelection.quote,
+      text_start: pendingSelection.textStart,
+      text_end: pendingSelection.textEnd,
+    };
+
+    fetch('/api/' + PITCH_ID + '/annotations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    .then(r => r.json())
+    .then(a => {
+      annotations.push(a);
+      renderAnnotations();
+      closePopup();
+    })
+    .catch(() => closePopup());
+  };
+
+  function highlightRange(textStart, textEnd, annotationId) {
+    const start = findNodeAtOffset(contentEl, textStart);
+    const end = findNodeAtOffset(contentEl, textEnd);
+    if (!start || !end) return;
+
+    try {
+      const range = document.createRange();
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+
+      const mark = document.createElement('mark');
+      mark.className = 'annotation-hl';
+      mark.dataset.annotationId = annotationId;
+      range.surroundContents(mark);
+    } catch(e) {
+      // surroundContents fails if range crosses element boundaries,
+      // skip highlight but still show the gutter card
+    }
+  }
+
+  function renderAnnotations() {
+    // Clear existing highlights
+    contentEl.querySelectorAll('mark.annotation-hl').forEach(m => {
+      const parent = m.parentNode;
+      while (m.firstChild) parent.insertBefore(m.firstChild, m);
+      parent.removeChild(m);
+    });
+    contentEl.normalize();
+
+    gutterEl.innerHTML = '';
+
+    // Sort by text position
+    annotations.sort((a, b) => a.text_start - b.text_start);
+
+    // Apply highlights and create gutter cards
+    let lastCardBottom = 0;
+
+    annotations.forEach(function(a) {
+      highlightRange(a.text_start, a.text_end, a.id);
+
+      // Find the highlighted mark to position the card
+      const mark = contentEl.querySelector('mark[data-annotation-id="' + a.id + '"]');
+
+      let topPos = 0;
+      if (mark) {
+        const markRect = mark.getBoundingClientRect();
+        const gutterRect = gutterEl.getBoundingClientRect();
+        topPos = markRect.top - gutterRect.top + gutterEl.scrollTop;
+      }
+
+      // Prevent overlap
+      if (topPos < lastCardBottom + 8) topPos = lastCardBottom + 8;
+
+      const card = document.createElement('div');
+      card.className = 'annotation-card';
+      card.style.top = topPos + 'px';
+
+      const authorName = a.author || 'anonymous';
+      const timeStr = new Date(a.created * 1000).toLocaleDateString();
+      const truncQuote = a.quote.length > 50 ? a.quote.slice(0, 50) + '...' : a.quote;
+
+      card.innerHTML =
+        '<div class="ann-author">' + escHtml(authorName) + '</div>' +
+        '<div class="ann-quote">"' + escHtml(truncQuote) + '"</div>' +
+        '<div class="ann-comment">' + escHtml(a.comment) + '</div>' +
+        '<div class="ann-time">' + timeStr + '</div>';
+
+      // Hover link between card and highlight
+      if (mark) {
+        card.addEventListener('mouseenter', () => mark.style.background = '#ffe566');
+        card.addEventListener('mouseleave', () => mark.style.background = '');
+        mark.addEventListener('mouseenter', () => card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)');
+        mark.addEventListener('mouseleave', () => card.style.boxShadow = '');
+      }
+
+      gutterEl.appendChild(card);
+      lastCardBottom = topPos + card.offsetHeight;
+    });
+  }
+
+  function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // Load existing annotations
+  fetch('/api/' + PITCH_ID + '/annotations')
+    .then(r => r.json())
+    .then(function(data) {
+      annotations = data || [];
+      if (annotations.length) renderAnnotations();
+    })
+    .catch(() => {});
+})();
+</script>
 </body>
 </html>

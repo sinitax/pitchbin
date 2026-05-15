@@ -22,6 +22,17 @@ type Pitch struct {
 	Expires  int64
 }
 
+type Annotation struct {
+	ID        int64  `json:"id"`
+	PitchID   string `json:"pitch_id"`
+	Author    string `json:"author"`
+	Comment   string `json:"comment"`
+	Quote     string `json:"quote"`
+	TextStart int    `json:"text_start"`
+	TextEnd   int    `json:"text_end"`
+	Created   int64  `json:"created"`
+}
+
 func NewStore(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(wal)&_pragma=busy_timeout(5000)")
 	if err != nil {
@@ -49,6 +60,18 @@ func migrate(db *sql.DB) error {
 			expires  INTEGER NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS idx_pitches_expires ON pitches(expires) WHERE expires > 0;
+
+		CREATE TABLE IF NOT EXISTS annotations (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			pitch_id   TEXT NOT NULL REFERENCES pitches(id) ON DELETE CASCADE,
+			author     TEXT NOT NULL DEFAULT '',
+			comment    TEXT NOT NULL,
+			quote      TEXT NOT NULL,
+			text_start INTEGER NOT NULL,
+			text_end   INTEGER NOT NULL,
+			created    INTEGER NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_annotations_pitch ON annotations(pitch_id);
 
 		CREATE TABLE IF NOT EXISTS used_stamps (
 			hash    TEXT PRIMARY KEY,
@@ -123,4 +146,37 @@ func (s *Store) PitchExists(id string) bool {
 	var exists int
 	s.db.QueryRow(`SELECT 1 FROM pitches WHERE id = ? LIMIT 1`, id).Scan(&exists)
 	return exists == 1
+}
+
+func (s *Store) InsertAnnotation(a *Annotation) (int64, error) {
+	res, err := s.db.Exec(
+		`INSERT INTO annotations (pitch_id, author, comment, quote, text_start, text_end, created)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		a.PitchID, a.Author, a.Comment, a.Quote, a.TextStart, a.TextEnd, a.Created,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (s *Store) GetAnnotations(pitchID string) ([]Annotation, error) {
+	rows, err := s.db.Query(
+		`SELECT id, pitch_id, author, comment, quote, text_start, text_end, created
+		 FROM annotations WHERE pitch_id = ? ORDER BY text_start, created`, pitchID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Annotation
+	for rows.Next() {
+		var a Annotation
+		if err := rows.Scan(&a.ID, &a.PitchID, &a.Author, &a.Comment, &a.Quote, &a.TextStart, &a.TextEnd, &a.Created); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }

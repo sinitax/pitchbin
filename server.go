@@ -53,7 +53,7 @@ type pitchPage struct {
 	BaseURL  string
 }
 
-func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSize int) *Server {
+func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSize, rateLimit int) *Server {
 	tmpl := template.Must(template.ParseFS(templateFS, "templates/pitch.html"))
 
 	s := &Server{
@@ -63,12 +63,14 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSiz
 		powBits:  powBits,
 		maxSize:  maxSize,
 		tmpl:     tmpl,
-		limiter:  NewRateLimiter(5, time.Minute),
+		limiter:  NewRateLimiter(rateLimit, time.Minute),
 		mux:      http.NewServeMux(),
 	}
 
 	s.mux.HandleFunc("POST /api/pitch", s.handleSubmit)
 	s.mux.HandleFunc("GET /api/info", s.handleInfo)
+	s.mux.HandleFunc("GET /api/{id}/annotations", s.handleGetAnnotations)
+	s.mux.HandleFunc("POST /api/{id}/annotations", s.handlePostAnnotation)
 	s.mux.HandleFunc("GET /{id}/raw", s.handleRaw)
 	s.mux.HandleFunc("GET /{id}", s.handleView)
 
@@ -242,6 +244,62 @@ func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Write([]byte(pitch.Markdown))
+}
+
+func (s *Server) handleGetAnnotations(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	annotations, err := s.store.GetAnnotations(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if annotations == nil {
+		annotations = []Annotation{}
+	}
+	writeJSON(w, http.StatusOK, annotations)
+}
+
+func (s *Server) handlePostAnnotation(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	if !s.store.PitchExists(id) {
+		http.NotFound(w, r)
+		return
+	}
+
+	var req struct {
+		Author    string `json:"author"`
+		Comment   string `json:"comment"`
+		Quote     string `json:"quote"`
+		TextStart int    `json:"text_start"`
+		TextEnd   int    `json:"text_end"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.Comment == "" || req.Quote == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "comment and quote are required"})
+		return
+	}
+
+	a := &Annotation{
+		PitchID:   id,
+		Author:    req.Author,
+		Comment:   req.Comment,
+		Quote:     req.Quote,
+		TextStart: req.TextStart,
+		TextEnd:   req.TextEnd,
+		Created:   time.Now().Unix(),
+	}
+	aid, err := s.store.InsertAnnotation(a)
+	if err != nil {
+		log.Printf("annotation insert error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	a.ID = aid
+	writeJSON(w, http.StatusCreated, a)
 }
 
 func parseExpiry(s string, now time.Time) int64 {
