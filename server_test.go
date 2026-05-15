@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -364,21 +365,231 @@ func TestClientIP(t *testing.T) {
 	}
 }
 
-// Ensure markdown rendering produces sanitized output
-func TestRenderIntegration(t *testing.T) {
+func TestXSSRendering(t *testing.T) {
 	r := NewRenderer()
-	html, err := r.Render([]byte("# Title\n\n**bold** and `code`\n\n<script>alert('xss')</script>"))
-	if err != nil {
-		t.Fatal(err)
+
+	// Each test: malicious markdown input -> list of strings that must NOT appear in output
+	tests := []struct {
+		name    string
+		input   string
+		reject  []string
+		require []string // strings that SHOULD appear (to verify rendering works)
+	}{
+		{
+			name:   "script tag",
+			input:  "<script>alert('xss')</script>",
+			reject: []string{"<script>", "</script>"},
+		},
+		{
+			name:   "script in markdown",
+			input:  "# Title\n\n<script>document.cookie</script>\n\ntext",
+			reject: []string{"<script>", "document.cookie"},
+			require: []string{"<h1>Title</h1>", "text"},
+		},
+		{
+			name:   "img onerror",
+			input:  `<img src=x onerror="alert('xss')">`,
+			reject: []string{"onerror"},
+		},
+		{
+			name:   "svg onload",
+			input:  `<svg onload="alert('xss')">`,
+			reject: []string{"onload"},
+		},
+		{
+			name:   "event handler in tag",
+			input:  `<div onmouseover="alert('xss')">hover me</div>`,
+			reject: []string{"onmouseover"},
+		},
+		{
+			name:   "javascript: URL in link",
+			input:  `<a href="javascript:alert('xss')">click</a>`,
+			reject: []string{"javascript:"},
+		},
+		{
+			name:   "javascript: URL in markdown link",
+			input:  `[click](javascript:alert('xss'))`,
+			reject: []string{"javascript:"},
+		},
+		{
+			name:   "data: URL in link",
+			input:  `<a href="data:text/html,<script>alert('xss')</script>">click</a>`,
+			reject: []string{"data:text/html"},
+		},
+		{
+			name:   "iframe",
+			input:  `<iframe src="https://evil.com"></iframe>`,
+			reject: []string{"<iframe"},
+		},
+		{
+			name:   "object tag",
+			input:  `<object data="https://evil.com/flash.swf"></object>`,
+			reject: []string{"<object"},
+		},
+		{
+			name:   "embed tag",
+			input:  `<embed src="https://evil.com/flash.swf">`,
+			reject: []string{"<embed"},
+		},
+		{
+			name:   "form tag",
+			input:  `<form action="https://evil.com"><input type="submit"></form>`,
+			reject: []string{"<form"},
+		},
+		{
+			name:   "style tag with expression",
+			input:  `<style>body{background:url('javascript:alert(1)')}</style>`,
+			reject: []string{"<style>"},
+		},
+		{
+			name:   "meta refresh",
+			input:  `<meta http-equiv="refresh" content="0;url=https://evil.com">`,
+			reject: []string{"<meta"},
+		},
+		{
+			name:   "base tag",
+			input:  `<base href="https://evil.com">`,
+			reject: []string{"<base"},
+		},
+		{
+			name:   "markdown image with onerror",
+			input:  `![alt](x" onerror="alert('xss'))`,
+			reject: []string{`onerror="alert`}, // bare onerror appears as text, not attribute
+		},
+		{
+			name:    "legitimate markdown preserved",
+			input:   "# Hello\n\n**bold** `code` [link](https://example.com)\n\n- item",
+			reject:  []string{},
+			require: []string{"<h1>Hello</h1>", "<strong>bold</strong>", "<code>code</code>", "https://example.com"},
+		},
 	}
-	if !bytes.Contains([]byte(html), []byte("<h1>Title</h1>")) {
-		t.Error("should render h1")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := r.Render([]byte(tt.input))
+			if err != nil {
+				t.Fatalf("render error: %v", err)
+			}
+			for _, bad := range tt.reject {
+				if strings.Contains(strings.ToLower(out), strings.ToLower(bad)) {
+					t.Errorf("output contains %q:\n%s", bad, out)
+				}
+			}
+			for _, good := range tt.require {
+				if !strings.Contains(out, good) {
+					t.Errorf("output missing %q:\n%s", good, out)
+				}
+			}
+		})
 	}
-	if !bytes.Contains([]byte(html), []byte("<strong>bold</strong>")) {
-		t.Error("should render bold")
+}
+
+func TestXSSEndToEnd(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	// Submit a pitch with XSS payloads in every field
+	stamp := solveStamp(8)
+	body, _ := json.Marshal(pitchRequest{
+		Stamp:    stamp,
+		Title:    `<script>alert("title")</script>`,
+		Author:   `<img src=x onerror=alert("author")>`,
+		Markdown: "# Hello\n\n<script>alert('body')</script>\n\n<img src=x onerror=alert(1)>\n\n[xss](javascript:alert(1))",
+	})
+
+	req := httptest.NewRequest("POST", "/api/pitch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != 201 {
+		t.Fatalf("submit status = %d, body = %s", w.Code, w.Body.String())
 	}
-	if bytes.Contains([]byte(html), []byte("<script>")) {
-		t.Error("should sanitize script tags")
+
+	var resp pitchResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	// View the rendered page
+	req = httptest.NewRequest("GET", "/"+resp.ID, nil)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("view status = %d", w.Code)
+	}
+
+	page := w.Body.String()
+
+	// Check that XSS payloads don't appear as executable code.
+	// The page has a legitimate <script> for annotation JS, so check payloads specifically.
+	// Note: escaped text like &lt;script&gt; or onerror=alert(&#34;) is safe — only check
+	// for unescaped dangerous patterns.
+
+	// Script payloads from markdown body should be stripped by bluemonday
+	if strings.Contains(page, "<script>alert") {
+		t.Error("script payload in markdown body not sanitized")
+	}
+	if strings.Contains(page, "javascript:alert") {
+		t.Error("javascript: URL not sanitized")
+	}
+
+	// Title should be escaped by html/template (< becomes &lt;)
+	if strings.Contains(page, `<script>alert("title")`) {
+		t.Error("title contains unescaped script tag")
+	}
+
+	// Author should be escaped by html/template
+	if strings.Contains(page, `<img src=x onerror`) {
+		t.Error("author contains unescaped img tag with event handler")
+	}
+
+	// Verify the escaped versions ARE present (proving template escaping works)
+	if !strings.Contains(page, `&lt;script&gt;`) {
+		t.Error("title should contain escaped script tag")
+	}
+}
+
+func TestXSSAnnotations(t *testing.T) {
+	srv, store := newTestServer(t)
+	store.InsertPitch(&Pitch{ID: "p1", Markdown: "hello", HTML: "hello", Created: 1, Expires: 0})
+
+	// Submit annotation with XSS in every field
+	body, _ := json.Marshal(map[string]any{
+		"author":     `<script>alert("author")</script>`,
+		"comment":    `<img src=x onerror=alert("comment")>`,
+		"quote":      `<script>alert("quote")</script>`,
+		"text_start": 0,
+		"text_end":   5,
+	})
+	req := httptest.NewRequest("POST", "/api/p1/annotations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != 201 {
+		t.Fatalf("status = %d", w.Code)
+	}
+
+	// Fetch annotations — they're JSON so the raw values are stored,
+	// but the frontend escapes them via escHtml() before inserting into DOM.
+	// Verify the API returns the raw values (no server-side mutation).
+	req = httptest.NewRequest("GET", "/api/p1/annotations", nil)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	var annotations []Annotation
+	json.NewDecoder(w.Body).Decode(&annotations)
+	if len(annotations) != 1 {
+		t.Fatalf("len = %d", len(annotations))
+	}
+
+	// The annotation data is stored as-is (XSS prevention is client-side via escHtml).
+	// Verify the values round-trip correctly so the client can escape them.
+	a := annotations[0]
+	if a.Author != `<script>alert("author")</script>` {
+		t.Errorf("author mangled: %q", a.Author)
+	}
+	if a.Comment != `<img src=x onerror=alert("comment")>` {
+		t.Errorf("comment mangled: %q", a.Comment)
 	}
 }
 
