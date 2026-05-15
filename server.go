@@ -44,6 +44,7 @@ type pitchResponse struct {
 type pitchPage struct {
 	Title           string
 	Author          string
+	AuthorURL       string
 	HTML            template.HTML
 	Created         time.Time
 	Expires         *time.Time

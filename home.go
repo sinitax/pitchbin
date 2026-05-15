@@ -114,6 +114,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	page := pitchPage{
 		Title:           "pitchbin",
 		Author:          "sinitax",
+		AuthorURL:       "https://sinitax.com",
 		HTML:            template.HTML(html),
 		Created:         time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC),
 		Views:           0,

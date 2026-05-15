@@ -293,7 +293,7 @@ footer a:hover { color: #666; }
     <div class="meta">
       {{if .Title}}<h1>{{.Title}}</h1>{{end}}
       <div class="meta-row">
-        {{if .Author}}<span>by {{.Author}}</span>{{end}}
+        {{if .Author}}<span>by {{if .AuthorURL}}<a href="{{.AuthorURL}}">{{.Author}}</a>{{else}}{{.Author}}{{end}}</span>{{end}}
         <span>{{.Created.Format "Jan 2, 2006"}}</span>
         <span>{{.Views}} view{{if ne .Views 1}}s{{end}}</span>
         {{if .Expires}}<span>expires {{.Expires.Format "Jan 2, 2006"}}</span>{{end}}
