@@ -42,15 +42,17 @@ type pitchResponse struct {
 }
 
 type pitchPage struct {
-	Title    string
-	Author   string
-	HTML     template.HTML
-	Created  time.Time
-	Expires  *time.Time
-	Views    int64
-	ID       string
-	RawURL   string
-	BaseURL  string
+	Title           string
+	Author          string
+	HTML            template.HTML
+	Created         time.Time
+	Expires         *time.Time
+	Views           int64
+	ID              string
+	RawURL          string
+	BaseURL         string
+	Readonly        bool
+	AnnotationsJSON template.JS
 }
 
 func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSize, rateLimit int) *Server {
@@ -67,6 +69,7 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSiz
 		mux:      http.NewServeMux(),
 	}
 
+	s.mux.HandleFunc("GET /{$}", s.handleHome)
 	s.mux.HandleFunc("POST /api/pitch", s.handleSubmit)
 	s.mux.HandleFunc("GET /api/info", s.handleInfo)
 	s.mux.HandleFunc("GET /api/{id}/annotations", s.handleGetAnnotations)

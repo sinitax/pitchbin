@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{if .Title}}{{.Title}} — pitchbin{{else}}pitchbin{{end}}</title>
+<title>{{if .Readonly}}pitchbin{{else if .Title}}{{.Title}} — pitchbin{{else}}pitchbin{{end}}</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -298,9 +298,9 @@ footer a:hover { color: #666; }
         <span>{{.Views}} view{{if ne .Views 1}}s{{end}}</span>
         {{if .Expires}}<span>expires {{.Expires.Format "Jan 2, 2006"}}</span>{{end}}
       </div>
-      <div class="name-badge" id="name-badge">
+      {{if not .Readonly}}<div class="name-badge" id="name-badge">
         <input type="text" id="reviewer-name" placeholder="your name" autocomplete="off">
-      </div>
+      </div>{{end}}
     </div>
 
     <div class="content" id="content">
@@ -309,53 +309,132 @@ footer a:hover { color: #666; }
 
     <footer>
       <span><a href="{{.BaseURL}}">pitchbin</a></span>
-      <span><a href="{{.RawURL}}">raw</a></span>
+      {{if not .Readonly}}<span><a href="{{.RawURL}}">raw</a></span>{{end}}
     </footer>
   </div>
 
   <div class="annotations-gutter" id="gutter"></div>
 </div>
 
-<div class="comment-popup" id="comment-popup">
+{{if not .Readonly}}<div class="comment-popup" id="comment-popup">
   <textarea id="comment-text" placeholder="Add a comment..."></textarea>
   <div class="popup-actions">
     <button onclick="closePopup()">Cancel</button>
     <button class="primary" onclick="submitComment()">Comment</button>
   </div>
-</div>
+</div>{{end}}
 
 <script>
 (function() {
   const PITCH_ID = {{.ID}};
+  const READONLY = {{.Readonly}};
   const contentEl = document.getElementById('content');
   const gutterEl = document.getElementById('gutter');
-  const popup = document.getElementById('comment-popup');
-  const commentText = document.getElementById('comment-text');
-  const nameInput = document.getElementById('reviewer-name');
-  const nameBadge = document.getElementById('name-badge');
 
   let pendingSelection = null;
   let annotations = [];
 
-  // Name persistence
-  const savedName = localStorage.getItem('pitchbin-name') || '';
-  nameInput.value = savedName;
-  if (savedName) nameBadge.classList.add('has-name');
+  if (!READONLY) {
+    const popup = document.getElementById('comment-popup');
+    const commentText = document.getElementById('comment-text');
+    const nameInput = document.getElementById('reviewer-name');
+    const nameBadge = document.getElementById('name-badge');
 
-  nameInput.addEventListener('input', function() {
-    localStorage.setItem('pitchbin-name', this.value);
-    nameBadge.classList.toggle('has-name', this.value.length > 0);
-  });
+    // Name persistence
+    const savedName = localStorage.getItem('pitchbin-name') || '';
+    nameInput.value = savedName;
+    if (savedName) nameBadge.classList.add('has-name');
 
-  // Get text offset within content element
-  function getTextOffset(container, node, offset) {
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-    let pos = 0;
-    while (walker.nextNode()) {
-      if (walker.currentNode === node) return pos + offset;
-      pos += walker.currentNode.textContent.length;
+    nameInput.addEventListener('input', function() {
+      localStorage.setItem('pitchbin-name', this.value);
+      nameBadge.classList.toggle('has-name', this.value.length > 0);
+    });
+
+    // Get text offset within content element
+    function getTextOffset(container, node, offset) {
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      let pos = 0;
+      while (walker.nextNode()) {
+        if (walker.currentNode === node) return pos + offset;
+        pos += walker.currentNode.textContent.length;
+      }
+      return pos;
     }
-    return pos;
+
+    // Handle text selection
+    contentEl.addEventListener('mouseup', function(e) {
+      if (e.target.classList && e.target.classList.contains('annotation-hl')) return;
+
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+
+      const range = sel.getRangeAt(0);
+      if (!contentEl.contains(range.startContainer) || !contentEl.contains(range.endContainer)) return;
+
+      const quote = sel.toString().trim();
+      if (!quote || quote.length < 2) return;
+
+      const textStart = getTextOffset(contentEl, range.startContainer, range.startOffset);
+      const textEnd = getTextOffset(contentEl, range.endContainer, range.endOffset);
+
+      const rects = range.getClientRects();
+      const lastRect = rects[rects.length - 1];
+
+      pendingSelection = { quote, textStart, textEnd };
+
+      popup.style.display = 'block';
+      popup.style.left = Math.min(lastRect.right + 8, window.innerWidth - 280) + 'px';
+      popup.style.top = (lastRect.bottom + window.scrollY + 4) + 'px';
+      commentText.value = '';
+      commentText.focus();
+    });
+
+    document.addEventListener('mousedown', function(e) {
+      if (!popup.contains(e.target) && popup.style.display === 'block') {
+        setTimeout(function() {
+          if (!popup.contains(document.activeElement)) closePopup();
+        }, 150);
+      }
+    });
+
+    commentText.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        submitComment();
+      }
+      if (e.key === 'Escape') closePopup();
+    });
+
+    window.closePopup = function() {
+      popup.style.display = 'none';
+      pendingSelection = null;
+      window.getSelection().removeAllRanges();
+    };
+
+    window.submitComment = function() {
+      if (!pendingSelection || !commentText.value.trim()) return;
+
+      const body = {
+        author: nameInput.value.trim(),
+        comment: commentText.value.trim(),
+        quote: pendingSelection.quote,
+        text_start: pendingSelection.textStart,
+        text_end: pendingSelection.textEnd,
+      };
+
+      fetch('/api/' + PITCH_ID + '/annotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      .then(r => r.json())
+      .then(a => {
+        annotations.push(a);
+        renderAnnotations();
+        closePopup();
+      })
+      .catch(() => closePopup());
+    };
   }
 
   // Find text node and offset from a character position
@@ -372,86 +451,6 @@ footer a:hover { color: #666; }
     return null;
   }
 
-  // Handle text selection
-  contentEl.addEventListener('mouseup', function(e) {
-    // Don't trigger on clicks on existing highlights
-    if (e.target.classList && e.target.classList.contains('annotation-hl')) return;
-
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
-
-    const range = sel.getRangeAt(0);
-    if (!contentEl.contains(range.startContainer) || !contentEl.contains(range.endContainer)) return;
-
-    const quote = sel.toString().trim();
-    if (!quote || quote.length < 2) return;
-
-    const textStart = getTextOffset(contentEl, range.startContainer, range.startOffset);
-    const textEnd = getTextOffset(contentEl, range.endContainer, range.endOffset);
-
-    // Position popup near end of selection
-    const rects = range.getClientRects();
-    const lastRect = rects[rects.length - 1];
-
-    pendingSelection = { quote, textStart, textEnd };
-
-    popup.style.display = 'block';
-    popup.style.left = Math.min(lastRect.right + 8, window.innerWidth - 280) + 'px';
-    popup.style.top = (lastRect.bottom + window.scrollY + 4) + 'px';
-    commentText.value = '';
-    commentText.focus();
-  });
-
-  // Close popup on click outside
-  document.addEventListener('mousedown', function(e) {
-    if (!popup.contains(e.target) && popup.style.display === 'block') {
-      // Small delay to let mouseup on content fire first
-      setTimeout(function() {
-        if (!popup.contains(document.activeElement)) closePopup();
-      }, 150);
-    }
-  });
-
-  // Keyboard shortcut
-  commentText.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      submitComment();
-    }
-    if (e.key === 'Escape') closePopup();
-  });
-
-  window.closePopup = function() {
-    popup.style.display = 'none';
-    pendingSelection = null;
-    window.getSelection().removeAllRanges();
-  };
-
-  window.submitComment = function() {
-    if (!pendingSelection || !commentText.value.trim()) return;
-
-    const body = {
-      author: nameInput.value.trim(),
-      comment: commentText.value.trim(),
-      quote: pendingSelection.quote,
-      text_start: pendingSelection.textStart,
-      text_end: pendingSelection.textEnd,
-    };
-
-    fetch('/api/' + PITCH_ID + '/annotations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    .then(r => r.json())
-    .then(a => {
-      annotations.push(a);
-      renderAnnotations();
-      closePopup();
-    })
-    .catch(() => closePopup());
-  };
-
   function highlightRange(textStart, textEnd, annotationId) {
     const start = findNodeAtOffset(contentEl, textStart);
     const end = findNodeAtOffset(contentEl, textEnd);
@@ -466,14 +465,10 @@ footer a:hover { color: #666; }
       mark.className = 'annotation-hl';
       mark.dataset.annotationId = annotationId;
       range.surroundContents(mark);
-    } catch(e) {
-      // surroundContents fails if range crosses element boundaries,
-      // skip highlight but still show the gutter card
-    }
+    } catch(e) {}
   }
 
   function renderAnnotations() {
-    // Clear existing highlights
     contentEl.querySelectorAll('mark.annotation-hl').forEach(m => {
       const parent = m.parentNode;
       while (m.firstChild) parent.insertBefore(m.firstChild, m);
@@ -482,17 +477,13 @@ footer a:hover { color: #666; }
     contentEl.normalize();
 
     gutterEl.innerHTML = '';
-
-    // Sort by text position
     annotations.sort((a, b) => a.text_start - b.text_start);
 
-    // Apply highlights and create gutter cards
     let lastCardBottom = 0;
 
     annotations.forEach(function(a) {
       highlightRange(a.text_start, a.text_end, a.id);
 
-      // Find the highlighted mark to position the card
       const mark = contentEl.querySelector('mark[data-annotation-id="' + a.id + '"]');
 
       let topPos = 0;
@@ -502,7 +493,6 @@ footer a:hover { color: #666; }
         topPos = markRect.top - gutterRect.top + gutterEl.scrollTop;
       }
 
-      // Prevent overlap
       if (topPos < lastCardBottom + 8) topPos = lastCardBottom + 8;
 
       const card = document.createElement('div');
@@ -519,7 +509,6 @@ footer a:hover { color: #666; }
         '<div class="ann-comment">' + escHtml(a.comment) + '</div>' +
         '<div class="ann-time">' + timeStr + '</div>';
 
-      // Hover link between card and highlight
       if (mark) {
         card.addEventListener('mouseenter', () => mark.style.background = '#ffe566');
         card.addEventListener('mouseleave', () => mark.style.background = '');
@@ -538,7 +527,11 @@ footer a:hover { color: #666; }
     return d.innerHTML;
   }
 
-  // Load existing annotations
+  // Load annotations
+  {{if .Readonly}}
+  annotations = {{.AnnotationsJSON}};
+  if (annotations.length) renderAnnotations();
+  {{else}}
   fetch('/api/' + PITCH_ID + '/annotations')
     .then(r => r.json())
     .then(function(data) {
@@ -546,6 +539,7 @@ footer a:hover { color: #666; }
       if (annotations.length) renderAnnotations();
     })
     .catch(() => {});
+  {{end}}
 })();
 </script>
 </body>
