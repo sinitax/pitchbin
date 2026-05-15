@@ -1,0 +1,6 @@
+pitchbin
+*.db
+*.db-wal
+*.db-shm
+docker/
+.git/

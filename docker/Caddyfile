@@ -1,0 +1,3 @@
+{$PITCHBIN_DOMAIN:localhost} {
+	reverse_proxy pitchbin:8080
+}
