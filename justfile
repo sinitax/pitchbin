@@ -34,4 +34,4 @@ test-all: test test-cli
 check: fmt vet test
 
 deploy HOST:
-    ssh {{HOST}} "cd pitchbin && docker compose -f docker/compose.yml up -d --build"
+    ssh {{HOST}} "cd pitchbin && ln -sf compose.traefik.yaml docker/compose.override.yaml && docker compose -f docker/compose.yaml up -d --build"

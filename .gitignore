@@ -2,3 +2,4 @@ pitchbin
 *.db
 *.db-wal
 *.db-shm
+docker/compose.override.yaml

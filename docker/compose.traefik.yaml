@@ -1,20 +1,5 @@
 services:
   pitchbin:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    volumes:
-      - data:/data
-    command:
-      - -addr
-      - ":8080"
-      - -db
-      - /data/pitchbin.db
-      - -base-url
-      - ${PITCHBIN_BASE_URL:-https://pitchbin.xyz}
-      - -pow-bits
-      - ${PITCHBIN_POW_BITS:-20}
-    restart: unless-stopped
     networks:
       - default
       - docker-ingress
@@ -24,9 +9,6 @@ services:
       - traefik.http.routers.pitchbin.entrypoints=websecure
       - traefik.http.routers.pitchbin.tls.certresolver=letsencrypt
       - traefik.http.services.pitchbin.loadbalancer.server.port=8080
-
-volumes:
-  data:
 
 networks:
   docker-ingress:
