@@ -1,0 +1,327 @@
+package main
+
+import (
+	"database/sql"
+	"embed"
+	"encoding/json"
+	"html/template"
+	"log"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+)
+
+//go:embed templates/*
+var templateFS embed.FS
+
+type Server struct {
+	store    *Store
+	renderer *Renderer
+	baseURL  string
+	powBits  int
+	maxSize  int
+	tmpl     *template.Template
+	limiter  *RateLimiter
+	mux      *http.ServeMux
+}
+
+type pitchRequest struct {
+	Stamp    string `json:"stamp"`
+	Title    string `json:"title"`
+	Author   string `json:"author"`
+	Markdown string `json:"markdown"`
+	Expires  string `json:"expires"`
+}
+
+type pitchResponse struct {
+	ID        string `json:"id"`
+	URL       string `json:"url"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+}
+
+type pitchPage struct {
+	Title    string
+	Author   string
+	HTML     template.HTML
+	Created  time.Time
+	Expires  *time.Time
+	Views    int64
+	ID       string
+	RawURL   string
+	BaseURL  string
+}
+
+func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSize int) *Server {
+	tmpl := template.Must(template.ParseFS(templateFS, "templates/pitch.html"))
+
+	s := &Server{
+		store:    store,
+		renderer: renderer,
+		baseURL:  strings.TrimRight(baseURL, "/"),
+		powBits:  powBits,
+		maxSize:  maxSize,
+		tmpl:     tmpl,
+		limiter:  NewRateLimiter(5, time.Minute),
+		mux:      http.NewServeMux(),
+	}
+
+	s.mux.HandleFunc("POST /api/pitch", s.handleSubmit)
+	s.mux.HandleFunc("GET /api/info", s.handleInfo)
+	s.mux.HandleFunc("GET /{id}/raw", s.handleRaw)
+	s.mux.HandleFunc("GET /{id}", s.handleView)
+
+	return s
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mux.ServeHTTP(w, r)
+}
+
+func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"service": "pitchbin",
+		"pow": map[string]any{
+			"algorithm": "sha256",
+			"bits":      s.powBits,
+			"version":   powVersion,
+			"format":    "pitchbin:<version>:<unix_ts>:<random_hex>:<nonce>",
+		},
+	})
+}
+
+func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r)
+	if !s.limiter.Allow(ip) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limited"})
+		return
+	}
+
+	var req pitchRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, int64(s.maxSize+4096))).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	if len(req.Markdown) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "markdown is required"})
+		return
+	}
+	if len(req.Markdown) > s.maxSize {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "markdown too large"})
+		return
+	}
+
+	// Verify proof of work
+	if err := VerifyStamp(req.Stamp, s.powBits); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid proof of work: " + err.Error()})
+		return
+	}
+
+	// Check replay
+	stampHash := StampHash(req.Stamp)
+	ok, err := s.store.UseStamp(stampHash)
+	if err != nil {
+		log.Printf("stamp check error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "stamp already used"})
+		return
+	}
+
+	// Render markdown
+	html, err := s.renderer.Render([]byte(req.Markdown))
+	if err != nil {
+		log.Printf("render error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to render markdown"})
+		return
+	}
+
+	// Generate ID
+	var id string
+	for range 3 {
+		id, err = GenerateID()
+		if err != nil {
+			continue
+		}
+		if !s.store.PitchExists(id) {
+			break
+		}
+	}
+	if id == "" {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate ID"})
+		return
+	}
+
+	now := time.Now()
+	expires := parseExpiry(req.Expires, now)
+
+	pitch := &Pitch{
+		ID:       id,
+		Title:    req.Title,
+		Author:   req.Author,
+		Markdown: req.Markdown,
+		HTML:     html,
+		Created:  now.Unix(),
+		Expires:  expires,
+	}
+
+	if err := s.store.InsertPitch(pitch); err != nil {
+		log.Printf("insert error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save pitch"})
+		return
+	}
+
+	resp := pitchResponse{
+		ID:  id,
+		URL: s.baseURL + "/" + id,
+	}
+	if expires > 0 {
+		resp.ExpiresAt = time.Unix(expires, 0).UTC().Format(time.RFC3339)
+	}
+
+	writeJSON(w, http.StatusCreated, resp)
+}
+
+func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	pitch, err := s.store.GetPitch(id)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if expired
+	if pitch.Expires > 0 && pitch.Expires < time.Now().Unix() {
+		http.NotFound(w, r)
+		return
+	}
+
+	s.store.IncrementViews(id)
+
+	created := time.Unix(pitch.Created, 0).UTC()
+	var expires *time.Time
+	if pitch.Expires > 0 {
+		t := time.Unix(pitch.Expires, 0).UTC()
+		expires = &t
+	}
+
+	page := pitchPage{
+		Title:   pitch.Title,
+		Author:  pitch.Author,
+		HTML:    template.HTML(pitch.HTML),
+		Created: created,
+		Expires: expires,
+		Views:   pitch.Views + 1,
+		ID:      pitch.ID,
+		RawURL:  s.baseURL + "/" + pitch.ID + "/raw",
+		BaseURL: s.baseURL,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.Execute(w, page); err != nil {
+		log.Printf("template error: %v", err)
+	}
+}
+
+func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	pitch, err := s.store.GetPitch(id)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	if pitch.Expires > 0 && pitch.Expires < time.Now().Unix() {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Write([]byte(pitch.Markdown))
+}
+
+func parseExpiry(s string, now time.Time) int64 {
+	switch s {
+	case "7d":
+		return now.Add(7 * 24 * time.Hour).Unix()
+	case "90d":
+		return now.Add(90 * 24 * time.Hour).Unix()
+	case "permanent", "perm":
+		return 0
+	default: // "30d" or anything else
+		return now.Add(30 * 24 * time.Hour).Unix()
+	}
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.Index(xff, ","); i != -1 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	// Strip port
+	addr := r.RemoteAddr
+	if i := strings.LastIndex(addr, ":"); i != -1 {
+		return addr[:i]
+	}
+	return addr
+}
+
+// RateLimiter is a simple per-key sliding window rate limiter.
+type RateLimiter struct {
+	mu      sync.Mutex
+	entries map[string][]time.Time
+	limit   int
+	window  time.Duration
+}
+
+func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
+	return &RateLimiter{
+		entries: make(map[string][]time.Time),
+		limit:   limit,
+		window:  window,
+	}
+}
+
+func (rl *RateLimiter) Allow(key string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	cutoff := now.Add(-rl.window)
+
+	times := rl.entries[key]
+	// Remove old entries
+	valid := times[:0]
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+
+	if len(valid) >= rl.limit {
+		rl.entries[key] = valid
+		return false
+	}
+
+	rl.entries[key] = append(valid, now)
+	return true
+}

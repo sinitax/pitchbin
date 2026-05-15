@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Title}}{{.Title}} — pitchbin{{else}}pitchbin{{end}}</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  color: #1a1a1a;
+  background: #fafafa;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+.meta {
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 1rem;
+  margin-bottom: 2rem;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.meta h1 {
+  font-size: 1.75rem;
+  line-height: 1.3;
+  color: #1a1a1a;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.meta-row span { white-space: nowrap; }
+
+.content h1 { font-size: 1.5rem; margin: 2rem 0 0.75rem; font-weight: 600; }
+.content h2 { font-size: 1.3rem; margin: 1.75rem 0 0.6rem; font-weight: 600; }
+.content h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; font-weight: 600; }
+.content h4, .content h5, .content h6 { font-size: 1rem; margin: 1.25rem 0 0.5rem; font-weight: 600; }
+
+.content p { margin-bottom: 1rem; }
+.content ul, .content ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+.content li { margin-bottom: 0.25rem; }
+.content li > ul, .content li > ol { margin-bottom: 0; }
+
+.content blockquote {
+  border-left: 3px solid #ccc;
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: #555;
+}
+
+.content code {
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", monospace;
+  font-size: 0.875em;
+  background: #f0f0f0;
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+}
+
+.content pre {
+  background: #f6f6f6;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+  line-height: 1.5;
+}
+
+.content pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.85em;
+}
+
+.content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.95rem;
+}
+
+.content th, .content td {
+  border: 1px solid #ddd;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.content th { background: #f0f0f0; font-weight: 600; }
+.content tr:nth-child(even) { background: #f9f9f9; }
+
+.content img { max-width: 100%; height: auto; border-radius: 4px; }
+.content hr { border: none; border-top: 1px solid #e0e0e0; margin: 2rem 0; }
+.content a { color: #0066cc; text-decoration: none; }
+.content a:hover { text-decoration: underline; }
+
+.content input[type="checkbox"] { margin-right: 0.4rem; }
+
+footer {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e0e0e0;
+  color: #999;
+  font-size: 0.8rem;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+footer a { color: #999; text-decoration: none; }
+footer a:hover { color: #666; }
+
+@media (max-width: 600px) {
+  .container { padding: 1rem; }
+  .meta h1 { font-size: 1.4rem; }
+  .meta-row { flex-direction: column; gap: 0.25rem; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="meta">
+    {{if .Title}}<h1>{{.Title}}</h1>{{end}}
+    <div class="meta-row">
+      {{if .Author}}<span>by {{.Author}}</span>{{end}}
+      <span>{{.Created.Format "Jan 2, 2006"}}</span>
+      <span>{{.Views}} view{{if ne .Views 1}}s{{end}}</span>
+      {{if .Expires}}<span>expires {{.Expires.Format "Jan 2, 2006"}}</span>{{end}}
+    </div>
+  </div>
+
+  <div class="content">
+    {{.HTML}}
+  </div>
+
+  <footer>
+    <span><a href="{{.BaseURL}}">pitchbin</a></span>
+    <span><a href="{{.RawURL}}">raw</a></span>
+  </footer>
+</div>
+</body>
+</html>

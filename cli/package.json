@@ -1,0 +1,10 @@
+{
+  "name": "pitchbin",
+  "version": "0.1.0",
+  "description": "CLI for submitting pitches to pitchbin with proof-of-work",
+  "bin": {
+    "pitchbin": "./pitchbin.mjs"
+  },
+  "type": "module",
+  "license": "MIT"
+}

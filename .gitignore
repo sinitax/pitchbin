@@ -1,0 +1,4 @@
+pitchbin
+*.db
+*.db-wal
+*.db-shm
