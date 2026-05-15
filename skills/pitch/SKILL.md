@@ -1,6 +1,9 @@
 ---
 name: pitch
-description: Share a report, proposal, or insight as a clean rendered page via pitchbin. Creates a short shareable URL.
+description: >
+  Share a report, proposal, or insight as a clean rendered page via pitchbin.
+  Creates a short shareable URL. Use when the user says "pitch this", "share this",
+  "make a page", or invokes /pitch.
 ---
 
 # Pitch to Pitchbin
@@ -24,10 +27,10 @@ You are helping the user share content via pitchbin — a service that renders m
 
    Example question: "What title should this pitch have?" with options based on the content.
 
-4. **Submit via CLI.** Once confirmed, write the markdown to a temp file and run the pitchbin CLI:
+4. **Submit via CLI.** Once confirmed, pipe the markdown into the pitchbin CLI:
 
    ```bash
-   cat <<'PITCH_EOF' | npx pitchbin --title "The Title" --author "claude" - 
+   cat <<'PITCH_EOF' | npx pitchbin --title "The Title" --author "claude" -
    # Your Markdown Here
    ...
    PITCH_EOF
