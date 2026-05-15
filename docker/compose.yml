@@ -3,8 +3,6 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    ports:
-      - "8080:8080"
     volumes:
       - data:/data
     command:
@@ -13,25 +11,23 @@ services:
       - -db
       - /data/pitchbin.db
       - -base-url
-      - ${PITCHBIN_BASE_URL:-http://localhost:8080}
+      - ${PITCHBIN_BASE_URL:-https://pitchbin.xyz}
       - -pow-bits
       - ${PITCHBIN_POW_BITS:-20}
     restart: unless-stopped
-
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    restart: unless-stopped
-    profiles:
-      - tls
+    networks:
+      - default
+      - docker-ingress
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.pitchbin.rule=Host(`${PITCHBIN_DOMAIN:-pitchbin.xyz}`)
+      - traefik.http.routers.pitchbin.entrypoints=websecure
+      - traefik.http.routers.pitchbin.tls.certresolver=letsencrypt
+      - traefik.http.services.pitchbin.loadbalancer.server.port=8080
 
 volumes:
   data:
-  caddy_data:
-  caddy_config:
+
+networks:
+  docker-ingress:
+    external: true

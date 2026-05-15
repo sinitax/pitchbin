@@ -34,6 +34,4 @@ test-all: test test-cli
 check: fmt vet test
 
 deploy HOST:
-    GOOS=linux GOARCH=amd64 go build -o pitchbin .
-    scp pitchbin {{HOST}}:/usr/local/bin/pitchbin
-    ssh {{HOST}} systemctl restart pitchbin
+    ssh {{HOST}} "cd pitchbin && docker compose -f docker/compose.yml up -d --build"
