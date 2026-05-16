@@ -36,17 +36,19 @@ check: fmt vet test
 act:
     act push -W .github/workflows/test.yml
 
-dev: build
+dev host="localhost" port="8080": build
     #!/usr/bin/env bash
     set -e
-    ./pitchbin -addr :8080 -base-url http://localhost:8080 &
+    ADDR="{{host}}:{{port}}"
+    BASE_URL="http://${ADDR}"
+    ./pitchbin -addr "$ADDR" -base-url "$BASE_URL" &
     PID=$!
     trap "kill $PID 2>/dev/null; exit" EXIT INT TERM
     while inotifywait -q -r -e modify,create,delete --include '\.(go|html|css|js)$' . ; do
         kill $PID 2>/dev/null
         wait $PID 2>/dev/null || true
         go build -o pitchbin . && {
-            ./pitchbin -addr :8080 -base-url http://localhost:8080 &
+            ./pitchbin -addr "$ADDR" -base-url "$BASE_URL" &
             PID=$!
         }
     done
