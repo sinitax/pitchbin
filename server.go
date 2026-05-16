@@ -18,6 +18,9 @@ import (
 //go:embed templates/*
 var templateFS embed.FS
 
+//go:embed favicon.svg
+var faviconSVG []byte
+
 type Server struct {
 	store             *Store
 	renderer          *Renderer
@@ -99,6 +102,8 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annota
 	}
 
 	s.mux.HandleFunc("GET /{$}", s.handleHome)
+	s.mux.HandleFunc("GET /favicon.ico", handleFavicon)
+	s.mux.HandleFunc("GET /favicon.svg", handleFavicon)
 	s.mux.HandleFunc("GET /robots.txt", handleRobots)
 	s.mux.HandleFunc("POST /api/pitch", s.handleSubmit)
 	s.mux.HandleFunc("GET /api/info", s.handleInfo)
@@ -469,6 +474,12 @@ func (s *Server) handleDeleteAnnotation(w http.ResponseWriter, r *http.Request) 
 
 func handleExampleRedirect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func handleFavicon(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Write(faviconSVG)
 }
 
 func handleRobots(w http.ResponseWriter, r *http.Request) {
