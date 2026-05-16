@@ -65,10 +65,24 @@ body {
 .meta a:hover { text-decoration: underline; }
 
 .annotation-card.editable { cursor: pointer; }
-.annotation-card.editable:hover { border-left-color: #0066cc; }
 
 .ann-edit-form { display: flex; flex-direction: column; gap: 0.3rem; }
-.ann-edit-form input, .ann-edit-form textarea {
+.ann-edit-form input {
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #555;
+  border: none;
+  border-bottom: 1px solid #ccc;
+  border-radius: 0;
+  padding: 0 0 0.15rem;
+  outline: none;
+  background: transparent;
+  width: 100%;
+}
+.ann-edit-form input:focus { border-bottom-color: #888; }
+.ann-edit-form input::placeholder { color: #bbb; font-weight: 400; }
+.ann-edit-form textarea {
   font-family: inherit;
   font-size: 0.8rem;
   border: 1px solid #ddd;
@@ -76,7 +90,7 @@ body {
   padding: 0.25rem 0.4rem;
   outline: none;
 }
-.ann-edit-form input:focus, .ann-edit-form textarea:focus { border-color: #999; }
+.ann-edit-form textarea:focus { border-color: #999; }
 .ann-edit-form textarea { min-height: 40px; resize: vertical; }
 .ann-edit-actions { display: flex; gap: 0.3rem; justify-content: flex-end; }
 .ann-edit-actions button {
