@@ -33,5 +33,8 @@ test-all: test test-cli
 
 check: fmt vet test
 
+act:
+    act push -W .github/workflows/test.yml
+
 deploy HOST:
     ssh {{HOST}} "cd pitchbin && ln -sf compose.traefik.yaml docker/compose.override.yaml && docker compose -f docker/compose.yaml up -d --build"

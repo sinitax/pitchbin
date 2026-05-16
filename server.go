@@ -19,16 +19,17 @@ import (
 var templateFS embed.FS
 
 type Server struct {
-	store        *Store
-	renderer     *Renderer
-	baseURL      string
-	powBits      int
-	maxSize      int
-	tmpl         *template.Template
-	limiter      *RateLimiter
-	mux          *http.ServeMux
-	trustedProxy string
-	homeHTML     string
+	store             *Store
+	renderer          *Renderer
+	baseURL           string
+	powBits           int
+	annotationPowBits int
+	maxSize           int
+	tmpl              *template.Template
+	limiter           *RateLimiter
+	mux               *http.ServeMux
+	trustedProxy      string
+	homeHTML          string
 }
 
 type pitchRequest struct {
@@ -62,7 +63,7 @@ type pitchPage struct {
 	PowBits         int
 }
 
-func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSize, rateLimit int, trustedProxy string) *Server {
+func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annotationPowBits, maxSize, rateLimit int, trustedProxy string) *Server {
 	tmpl := template.Must(template.ParseFS(templateFS, "templates/pitch.html"))
 
 	homeHTML, err := renderer.Render([]byte(homeMarkdown))
@@ -84,16 +85,17 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSiz
 	}
 
 	s := &Server{
-		store:        store,
-		renderer:     renderer,
-		baseURL:      strings.TrimRight(baseURL, "/"),
-		powBits:      powBits,
-		maxSize:      maxSize,
-		tmpl:         tmpl,
-		limiter:      NewRateLimiter(rateLimit, time.Minute),
-		mux:          http.NewServeMux(),
-		trustedProxy: trustedProxy,
-		homeHTML:     homeHTML,
+		store:             store,
+		renderer:          renderer,
+		baseURL:           strings.TrimRight(baseURL, "/"),
+		powBits:           powBits,
+		annotationPowBits: annotationPowBits,
+		maxSize:           maxSize,
+		tmpl:              tmpl,
+		limiter:           NewRateLimiter(rateLimit, time.Minute),
+		mux:               http.NewServeMux(),
+		trustedProxy:      trustedProxy,
+		homeHTML:          homeHTML,
 	}
 
 	s.mux.HandleFunc("GET /{$}", s.handleHome)
@@ -118,10 +120,11 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"service": "pitchbin",
 		"pow": map[string]any{
-			"algorithm": "sha256",
-			"bits":      s.powBits,
-			"version":   powVersion,
-			"format":    "pitchbin:<version>:<unix_ts>:<random_hex>:<nonce>",
+			"algorithm":      "sha256",
+			"bits":           s.powBits,
+			"annotation_bits": s.annotationPowBits,
+			"version":        powVersion,
+			"format":         "pitchbin:<version>:<unix_ts>:<random_hex>:<nonce>",
 		},
 	})
 }
@@ -250,7 +253,7 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		ID:      pitch.ID,
 		RawURL:  s.baseURL + "/" + pitch.ID + "/raw",
 		BaseURL: s.baseURL,
-		PowBits: s.powBits,
+		PowBits: s.annotationPowBits,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -343,8 +346,12 @@ func (s *Server) handlePostAnnotation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "comment and quote are required"})
 		return
 	}
+	if len(req.Comment) > 1024 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "comment too long (max 1KB)"})
+		return
+	}
 
-	if err := VerifyStamp(req.Stamp, s.powBits); err != nil {
+	if err := VerifyStamp(req.Stamp, s.annotationPowBits); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid proof of work: " + err.Error()})
 		return
 	}

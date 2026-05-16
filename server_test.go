@@ -17,7 +17,7 @@ func newTestServer(t *testing.T) (*Server, *Store) {
 	t.Helper()
 	store := newTestStore(t)
 	renderer := NewRenderer()
-	srv := NewServer(store, renderer, "http://test.local", 8, 512000, 100, "") // 8-bit PoW, generous rate limit
+	srv := NewServer(store, renderer, "http://test.local", 8, 8, 512000, 100, "") // 8-bit PoW, generous rate limit
 	return srv, store
 }
 

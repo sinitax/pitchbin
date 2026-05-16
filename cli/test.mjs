@@ -14,6 +14,22 @@ const BASE = process.env.PITCHBIN_URL || "http://localhost:18956";
 let passed = 0;
 let failed = 0;
 
+function solveStamp(bits) {
+  const ts = Math.floor(Date.now() / 1000);
+  const rand = randomBytes(8).toString("hex");
+  const prefix = `pitchbin:1:${ts}:${rand}:`;
+  for (let nonce = 0; ; nonce++) {
+    const stamp = prefix + nonce;
+    const hash = createHash("sha256").update(stamp).digest();
+    const fullBytes = bits >> 3;
+    const remainBits = bits & 7;
+    let ok = true;
+    for (let i = 0; i < fullBytes; i++) { if (hash[i] !== 0) { ok = false; break; } }
+    if (ok && remainBits > 0 && (hash[fullBytes] & (0xFF << (8 - remainBits))) !== 0) ok = false;
+    if (ok) return stamp;
+  }
+}
+
 function assert(cond, msg) {
   if (!cond) {
     console.error(`  FAIL: ${msg}`);
@@ -124,11 +140,14 @@ console.log("test: annotations API");
   assert(r.code === 0, "pitch created");
   const id = r.stdout.replace(BASE + "/", "");
 
+  // Compute a PoW stamp for the annotation
+  const stamp = solveStamp(8);
+
   // Post annotation
   const post = await fetch(`${BASE}/api/${id}/annotations`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ author: "tester", comment: "looks good", quote: "Some text", text_start: 12, text_end: 21 }),
+    body: JSON.stringify({ stamp, author: "tester", comment: "looks good", quote: "Some text", text_start: 12, text_end: 21 }),
   });
   assert(post.status === 201, `post annotation 201 (got ${post.status})`);
 
