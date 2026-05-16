@@ -41,7 +41,7 @@ func VerifyStamp(stamp string, bits int) error {
 	}
 
 	age := time.Now().Unix() - ts
-	if age < -30 || age > powMaxAgeSec {
+	if age < -powMaxAgeSec || age > powMaxAgeSec {
 		return fmt.Errorf("stamp expired or from the future")
 	}
 
