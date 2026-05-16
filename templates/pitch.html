@@ -431,7 +431,7 @@ footer a:hover { color: #666; }
     });
   }
 
-  function editAnnotation(card, a) {
+  function editAnnotation(card, a, focusTarget) {
     const truncQuote = a.quote.length > 50 ? a.quote.slice(0, 50) + '...' : a.quote;
     card.innerHTML =
       '<div class="ann-edit-form">' +
@@ -488,10 +488,7 @@ footer a:hover { color: #666; }
       if (e.key === 'Escape') renderAnnotations();
     });
 
-    // Don't steal focus — let the click target keep it
-    setTimeout(() => {
-      if (!card.contains(document.activeElement)) commentInput.focus();
-    }, 0);
+    (focusTarget === 'author' ? authorInput : commentInput).focus();
 
     function onClickOutside(e) {
       if (!card.contains(e.target)) {
@@ -598,7 +595,8 @@ footer a:hover { color: #666; }
         });
         card.addEventListener('click', function(e) {
           if (e.target.classList.contains('ann-delete')) return;
-          editAnnotation(card, a);
+          const clickedAuthor = e.target.closest('.ann-author');
+          editAnnotation(card, a, clickedAuthor ? 'author' : 'comment');
         });
       }
 
