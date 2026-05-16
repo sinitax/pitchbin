@@ -674,9 +674,9 @@ footer a:hover { color: #666; }
 
       const marks = contentEl.querySelectorAll('mark[data-annotation-id="' + a.id + '"]');
       marks.forEach(function(m) {
-        card.addEventListener('mouseenter', () => m.style.background = '#ffe566');
+        card.addEventListener('mouseenter', () => { clearActiveHighlight(); m.style.background = '#ffe566'; });
         card.addEventListener('mouseleave', () => m.style.background = '');
-        m.addEventListener('mouseenter', () => card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)');
+        m.addEventListener('mouseenter', () => { clearActiveHighlight(); card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)'; });
         m.addEventListener('mouseleave', () => card.style.boxShadow = '');
         m.style.cursor = 'pointer';
         m.addEventListener('click', function(e) {
@@ -717,11 +717,33 @@ footer a:hover { color: #666; }
     });
   });
 
+  let activeHighlight = null;
+
+  function clearActiveHighlight() {
+    if (!activeHighlight) return;
+    activeHighlight.card.style.boxShadow = '';
+    activeHighlight.marks.forEach(m => m.style.background = '');
+    activeHighlight = null;
+  }
+
+  function highlightAnnotation(id) {
+    clearActiveHighlight();
+    const card = document.getElementById('ann-' + id);
+    if (!card) return;
+    const marks = contentEl.querySelectorAll('mark[data-annotation-id="' + id + '"]');
+    if (!card && !marks.length) return;
+    card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+    marks.forEach(m => m.style.background = '#ffe566');
+    activeHighlight = { card, marks };
+  }
+
   function scrollToHash() {
     const hash = location.hash.slice(1);
     if (!hash) return;
     const el = document.getElementById(hash);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const annMatch = hash.match(/^ann-(.+)$/);
+    if (annMatch) highlightAnnotation(annMatch[1]);
   }
 
   // Load annotations
