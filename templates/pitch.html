@@ -164,7 +164,6 @@ mark.annotation-hl {
 }
 
 mark.annotation-hl:hover { background: #ffe566; }
-mark.annotation-hl.pending { background: #ffe066; border-bottom-style: dashed; }
 
 /* Annotation cards in gutter */
 .annotation-card {
@@ -208,57 +207,6 @@ mark.annotation-hl.pending { background: #ffe066; border-bottom-style: dashed; }
   font-size: 0.65rem;
   margin-top: 0.25rem;
 }
-
-/* Comment input popup */
-.comment-popup {
-  position: absolute;
-  z-index: 100;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  padding: 0.6rem;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-  width: 260px;
-  display: none;
-}
-
-.comment-popup textarea {
-  width: 100%;
-  min-height: 60px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 0.4rem;
-  font-family: inherit;
-  font-size: 0.85rem;
-  resize: vertical;
-  outline: none;
-}
-
-.comment-popup textarea:focus { border-color: #999; }
-
-.comment-popup .popup-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.4rem;
-  margin-top: 0.4rem;
-}
-
-.comment-popup button {
-  font-size: 0.8rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-  background: #fff;
-  cursor: pointer;
-}
-
-.comment-popup button.primary {
-  background: #1a1a1a;
-  color: #fff;
-  border-color: #1a1a1a;
-}
-
-.comment-popup button.primary:hover { background: #333; }
 
 footer {
   margin-top: 3rem;
@@ -310,13 +258,6 @@ footer a:hover { color: #666; }
   <div class="annotations-gutter" id="gutter"></div>
 </div>
 
-{{if not .Readonly}}<div class="comment-popup" id="comment-popup">
-  <textarea id="comment-text" placeholder="Add a comment..."></textarea>
-  <div class="popup-actions">
-    <button onclick="closePopup()">Cancel</button>
-    <button class="primary" onclick="submitComment()">Comment</button>
-  </div>
-</div>{{end}}
 
 <script>
 (function() {
@@ -329,9 +270,6 @@ footer a:hover { color: #666; }
   let annotations = [];
 
   if (!READONLY) {
-    const popup = document.getElementById('comment-popup');
-    const commentText = document.getElementById('comment-text');
-
     function getTextOffset(container, node, offset) {
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
       let pos = 0;
@@ -344,6 +282,7 @@ footer a:hover { color: #666; }
 
     contentEl.addEventListener('mouseup', function(e) {
       if (e.target.classList && e.target.classList.contains('annotation-hl')) return;
+      if (gutterEl.contains(e.target)) return;
 
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.rangeCount) return;
@@ -356,62 +295,47 @@ footer a:hover { color: #666; }
 
       const textStart = getTextOffset(contentEl, range.startContainer, range.startOffset);
       const textEnd = getTextOffset(contentEl, range.endContainer, range.endOffset);
-
-      const rects = range.getClientRects();
-      const lastRect = rects[rects.length - 1];
+      window.getSelection().removeAllRanges();
 
       pendingSelection = { quote, textStart, textEnd };
 
-      // Show pending highlight
-      clearPendingHighlight();
-      highlightRange(textStart, textEnd, 'pending');
-      contentEl.querySelectorAll('mark[data-annotation-id="pending"]').forEach(m => m.classList.add('pending'));
-      window.getSelection().removeAllRanges();
-
-      popup.style.display = 'block';
-      popup.style.left = Math.min(lastRect.right + 8, window.innerWidth - 280) + 'px';
-      popup.style.top = (lastRect.bottom + window.scrollY + 4) + 'px';
-      commentText.value = '';
-      commentText.focus();
+      // Add a temporary annotation and render everything — the pending card becomes an edit form
+      const pending = {
+        id: 'pending', pitch_id: PITCH_ID,
+        author: localStorage.getItem('pitchbin-name') || '',
+        comment: '', quote: quote,
+        text_start: textStart, text_end: textEnd,
+        created: Math.floor(Date.now() / 1000),
+        editable: true, _pending: true,
+      };
+      annotations = annotations.filter(a => !a._pending);
+      annotations.push(pending);
+      renderAnnotations();
     });
 
     document.addEventListener('mousedown', function(e) {
-      if (!popup.contains(e.target) && popup.style.display === 'block') {
-        setTimeout(function() {
-          if (!popup.contains(document.activeElement)) closePopup();
-        }, 150);
-      }
+      if (!pendingSelection) return;
+      if (gutterEl.contains(e.target)) return;
+      // Click outside gutter cancels pending
+      setTimeout(function() {
+        if (pendingSelection && !gutterEl.contains(document.activeElement)) {
+          cancelPending();
+        }
+      }, 150);
     });
 
-    commentText.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        submitComment();
-      }
-      if (e.key === 'Escape') closePopup();
-    });
-
-    function clearPendingHighlight() {
-      contentEl.querySelectorAll('mark.pending').forEach(m => {
-        const parent = m.parentNode;
-        while (m.firstChild) parent.insertBefore(m.firstChild, m);
-        parent.removeChild(m);
-      });
-      contentEl.normalize();
+    function cancelPending() {
+      pendingSelection = null;
+      annotations = annotations.filter(a => !a._pending);
+      renderAnnotations();
     }
 
-    window.closePopup = function() {
-      popup.style.display = 'none';
-      pendingSelection = null;
-      clearPendingHighlight();
-    };
-
-    window.submitComment = function() {
-      if (!pendingSelection || !commentText.value.trim()) return;
+    function submitPending(author, comment) {
+      if (!pendingSelection || !comment) return;
 
       const body = {
-        author: localStorage.getItem('pitchbin-name') || '',
-        comment: commentText.value.trim(),
+        author: author,
+        comment: comment,
         quote: pendingSelection.quote,
         text_start: pendingSelection.textStart,
         text_end: pendingSelection.textEnd,
@@ -424,12 +348,14 @@ footer a:hover { color: #666; }
       })
       .then(r => r.json())
       .then(a => {
+        localStorage.setItem('pitchbin-name', a.author);
+        annotations = annotations.filter(x => !x._pending);
         annotations.push(a);
+        pendingSelection = null;
         renderAnnotations();
-        closePopup();
       })
-      .catch(() => closePopup());
-    };
+      .catch(() => cancelPending());
+    }
   }
 
   function highlightRange(textStart, textEnd, annotationId) {
@@ -562,8 +488,51 @@ footer a:hover { color: #666; }
       if (topPos < lastCardBottom + 8) topPos = lastCardBottom + 8;
 
       const card = document.createElement('div');
-      card.className = 'annotation-card' + (a.editable ? ' editable' : '');
+      card.className = 'annotation-card' + (a.editable && !a._pending ? ' editable' : '');
       card.style.top = topPos + 'px';
+
+      if (a._pending) {
+        // Render as inline edit form for new comment
+        const truncQuote = a.quote.length > 50 ? a.quote.slice(0, 50) + '...' : a.quote;
+        card.innerHTML =
+          '<div class="ann-edit-form">' +
+            '<input type="text" class="edit-author" value="' + escAttr(a.author) + '" placeholder="your name">' +
+            '<div class="ann-quote">"' + escHtml(truncQuote) + '"</div>' +
+            '<textarea class="edit-comment" placeholder="Add a comment..."></textarea>' +
+            '<div class="ann-edit-actions">' +
+              '<button class="cancel">Cancel</button>' +
+              '<button class="save">Comment</button>' +
+            '</div>' +
+          '</div>';
+
+        const authorInput = card.querySelector('.edit-author');
+        const commentInput = card.querySelector('.edit-comment');
+
+        card.querySelector('.cancel').addEventListener('click', function(e) {
+          e.stopPropagation();
+          cancelPending();
+        });
+        card.querySelector('.save').addEventListener('click', function(e) {
+          e.stopPropagation();
+          submitPending(authorInput.value.trim(), commentInput.value.trim());
+        });
+        commentInput.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            submitPending(authorInput.value.trim(), commentInput.value.trim());
+          }
+          if (e.key === 'Escape') cancelPending();
+        });
+        authorInput.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') { e.preventDefault(); commentInput.focus(); }
+          if (e.key === 'Escape') cancelPending();
+        });
+
+        gutterEl.appendChild(card);
+        lastCardBottom = topPos + card.offsetHeight;
+        commentInput.focus();
+        return;
+      }
 
       const authorName = a.author || 'anonymous';
       const timeStr = new Date(a.created * 1000).toLocaleDateString();
