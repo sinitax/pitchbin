@@ -608,12 +608,20 @@ footer a:hover { color: #666; }
         });
       }
 
-      if (mark) {
-        card.addEventListener('mouseenter', () => mark.style.background = '#ffe566');
-        card.addEventListener('mouseleave', () => mark.style.background = '');
-        mark.addEventListener('mouseenter', () => card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)');
-        mark.addEventListener('mouseleave', () => card.style.boxShadow = '');
-      }
+      const marks = contentEl.querySelectorAll('mark[data-annotation-id="' + a.id + '"]');
+      marks.forEach(function(m) {
+        card.addEventListener('mouseenter', () => m.style.background = '#ffe566');
+        card.addEventListener('mouseleave', () => m.style.background = '');
+        m.addEventListener('mouseenter', () => card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)');
+        m.addEventListener('mouseleave', () => card.style.boxShadow = '');
+        if (a.editable && !READONLY) {
+          m.style.cursor = 'pointer';
+          m.addEventListener('click', function(e) {
+            e.stopPropagation();
+            editAnnotation(card, a, 'comment');
+          });
+        }
+      });
 
       gutterEl.appendChild(card);
       lastCardBottom = topPos + card.offsetHeight;
