@@ -654,7 +654,7 @@ footer a:hover { color: #666; }
 
       const card = document.createElement('div');
       card.className = 'annotation-card' + (a.editable && !a._pending && !a._submitting ? ' editable' : '');
-      card.id = 'ann-' + a.id;
+      card.id = '' + a.id;
       card.style.top = topPos + 'px';
 
       if (a._pending) {
@@ -723,14 +723,14 @@ footer a:hover { color: #666; }
         });
         card.addEventListener('click', function(e) {
           if (e.target.classList.contains('ann-delete')) return;
-          history.replaceState(null, '', '#ann-' + a.id);
+          history.replaceState(null, '', '#' + a.id);
           const clickedAuthor = e.target.closest('.ann-author');
           editAnnotation(card, a, clickedAuthor ? 'author' : 'comment');
         });
       } else if (!a._pending && !a._submitting) {
         card.style.cursor = 'pointer';
         card.addEventListener('click', function() {
-          history.replaceState(null, '', '#ann-' + a.id);
+          history.replaceState(null, '', '#' + a.id);
         });
       }
 
@@ -743,7 +743,7 @@ footer a:hover { color: #666; }
         m.style.cursor = 'pointer';
         m.addEventListener('click', function(e) {
           e.stopPropagation();
-          history.replaceState(null, '', '#ann-' + a.id);
+          history.replaceState(null, '', '#' + a.id);
           if (a.editable && !READONLY) {
             editAnnotation(card, a, 'comment');
           }
@@ -790,10 +790,11 @@ footer a:hover { color: #666; }
 
   function highlightAnnotation(id) {
     clearActiveHighlight();
-    const card = document.getElementById('ann-' + id);
+    const card = document.getElementById('' + id);
     if (!card) return;
     const marks = contentEl.querySelectorAll('mark[data-annotation-id="' + id + '"]');
-    if (!card && !marks.length) return;
+    if (!marks.length) return;
+    marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
     card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
     marks.forEach(m => m.style.background = '#ffe566');
     activeHighlight = { card, marks };
@@ -802,10 +803,13 @@ footer a:hover { color: #666; }
   function scrollToHash() {
     const hash = location.hash.slice(1);
     if (!hash) return;
+    const annMatch = hash.match(/^(\d+)$/);
+    if (annMatch) {
+      highlightAnnotation(annMatch[1]);
+      return;
+    }
     const el = document.getElementById(hash);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    const annMatch = hash.match(/^ann-(.+)$/);
-    if (annMatch) highlightAnnotation(annMatch[1]);
   }
 
   // Load annotations
