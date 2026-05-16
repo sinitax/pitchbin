@@ -29,6 +29,6 @@ jobs:
       - run: go build -o pitchbin .
       - name: Run CLI integration tests
         run: |
-          ./pitchbin -addr :18956 -base-url http://localhost:18956 -pow-bits 8 -rate-limit 100 -db pitchbin-test.db &
+          ./pitchbin -addr :18956 -base-url http://localhost:18956 -pow-bits 8 -annotation-pow-bits 8 -rate-limit 100 -db pitchbin-test.db &
           sleep 1
           node cli/test.mjs
