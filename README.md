@@ -4,9 +4,8 @@ Markdown → clean shareable page. One API call. No auth.
 
 ```
 npx pitchbin --title "Q3 Migration Plan" MIGRATION.md
+→ https://pitchbin.xyz/q3-migration-plan
 ```
-
-> https://pitchbin.xyz/q3-migration-plan
 
 That's it. The URL is live, rendered, and ready to send to anyone.
 
