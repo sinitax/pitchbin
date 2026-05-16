@@ -106,6 +106,8 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annota
 	s.mux.HandleFunc("POST /api/{id}/annotations", s.handlePostAnnotation)
 	s.mux.HandleFunc("PUT /api/{id}/annotations/{aid}", s.handleUpdateAnnotation)
 	s.mux.HandleFunc("DELETE /api/{id}/annotations/{aid}", s.handleDeleteAnnotation)
+	s.mux.HandleFunc("GET /q3-migration-plan", handleExampleRedirect)
+	s.mux.HandleFunc("GET /auth-module-review", handleExampleRedirect)
 	s.mux.HandleFunc("GET /{id}/raw", s.handleRaw)
 	s.mux.HandleFunc("GET /{id}", s.handleView)
 
@@ -463,6 +465,10 @@ func (s *Server) handleDeleteAnnotation(w http.ResponseWriter, r *http.Request) 
 
 	s.store.DeleteAnnotation(aid)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleExampleRedirect(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func handleRobots(w http.ResponseWriter, r *http.Request) {
