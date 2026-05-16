@@ -488,7 +488,10 @@ footer a:hover { color: #666; }
       if (e.key === 'Escape') renderAnnotations();
     });
 
-    commentInput.focus();
+    // Don't steal focus — let the click target keep it
+    setTimeout(() => {
+      if (!card.contains(document.activeElement)) commentInput.focus();
+    }, 0);
 
     function onClickOutside(e) {
       if (!card.contains(e.target)) {
