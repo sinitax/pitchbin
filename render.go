@@ -31,7 +31,7 @@ func NewRenderer() *Renderer {
 
 	policy := bluemonday.UGCPolicy()
 	policy.AllowAttrs("class").Matching(bluemonday.SpaceSeparatedTokens).OnElements("code", "pre", "span", "div")
-	policy.AllowAttrs("style").OnElements("span", "pre", "code")
+	policy.AllowStyles("color", "background-color", "font-weight", "font-style", "text-decoration").OnElements("span", "pre", "code")
 
 	return &Renderer{md: md, policy: policy}
 }

@@ -20,6 +20,7 @@ func main() {
 	powBits := flag.Int("pow-bits", 20, "proof-of-work difficulty in leading zero bits")
 	maxSize := flag.Int("max-size", 512000, "max markdown size in bytes")
 	rateLimit := flag.Int("rate-limit", 5, "submissions per minute per IP")
+	trustedProxy := flag.String("trusted-proxy", "", "IP of trusted reverse proxy (enables X-Forwarded-For)")
 	flag.Parse()
 
 	if *baseURL == "" {
@@ -41,12 +42,12 @@ func main() {
 
 	renderer := NewRenderer()
 
-	srv := NewServer(store, renderer, *baseURL, *powBits, *maxSize, *rateLimit)
+	srv := NewServer(store, renderer, *baseURL, *powBits, *maxSize, *rateLimit, *trustedProxy)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go RunCleanup(ctx, store, 10*time.Minute)
+	go RunCleanup(ctx, store, srv.limiter, 10*time.Minute)
 
 	httpSrv := &http.Server{
 		Addr:         *addr,

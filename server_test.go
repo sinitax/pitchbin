@@ -17,7 +17,7 @@ func newTestServer(t *testing.T) (*Server, *Store) {
 	t.Helper()
 	store := newTestStore(t)
 	renderer := NewRenderer()
-	srv := NewServer(store, renderer, "http://test.local", 8, 512000, 100) // 8-bit PoW, generous rate limit
+	srv := NewServer(store, renderer, "http://test.local", 8, 512000, 100, "") // 8-bit PoW, generous rate limit
 	return srv, store
 }
 
@@ -241,6 +241,7 @@ func TestAnnotations(t *testing.T) {
 
 	// POST annotation
 	body, _ := json.Marshal(map[string]any{
+		"stamp":      solveStamp(8),
 		"author":     "alice",
 		"comment":    "nice",
 		"quote":      "hello",
@@ -278,7 +279,15 @@ func TestAnnotations(t *testing.T) {
 	}
 
 	// POST to nonexistent pitch
-	req = httptest.NewRequest("POST", "/api/nope/annotations", bytes.NewReader(body))
+	body2, _ := json.Marshal(map[string]any{
+		"stamp":      solveStamp(8),
+		"author":     "alice",
+		"comment":    "nice",
+		"quote":      "hello",
+		"text_start": 0,
+		"text_end":   5,
+	})
+	req = httptest.NewRequest("POST", "/api/nope/annotations", bytes.NewReader(body2))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -337,14 +346,20 @@ func TestRateLimiter(t *testing.T) {
 
 func TestClientIP(t *testing.T) {
 	tests := []struct {
-		xff  string
-		addr string
-		want string
+		xff          string
+		addr         string
+		trustedProxy string
+		want         string
 	}{
-		{"1.2.3.4", "5.6.7.8:1234", "1.2.3.4"},
-		{"1.2.3.4, 5.6.7.8", "9.0.0.1:80", "1.2.3.4"},
-		{"", "1.2.3.4:8080", "1.2.3.4"},
-		{"", "1.2.3.4", "1.2.3.4"},
+		// With trusted proxy, XFF is used
+		{"1.2.3.4", "5.6.7.8:1234", "5.6.7.8", "1.2.3.4"},
+		{"1.2.3.4, 5.6.7.8", "9.0.0.1:80", "9.0.0.1", "1.2.3.4"},
+		// Without trusted proxy, XFF is ignored
+		{"1.2.3.4", "5.6.7.8:1234", "", "5.6.7.8"},
+		{"1.2.3.4", "5.6.7.8:1234", "10.0.0.1", "5.6.7.8"},
+		// No XFF
+		{"", "1.2.3.4:8080", "", "1.2.3.4"},
+		{"", "1.2.3.4", "", "1.2.3.4"},
 	}
 
 	for _, tt := range tests {
@@ -355,9 +370,9 @@ func TestClientIP(t *testing.T) {
 		if tt.xff != "" {
 			r.Header.Set("X-Forwarded-For", tt.xff)
 		}
-		got := clientIP(r)
+		got := clientIP(r, tt.trustedProxy)
 		if got != tt.want {
-			t.Errorf("clientIP(xff=%q, addr=%q) = %q, want %q", tt.xff, tt.addr, got, tt.want)
+			t.Errorf("clientIP(xff=%q, addr=%q, proxy=%q) = %q, want %q", tt.xff, tt.addr, tt.trustedProxy, got, tt.want)
 		}
 	}
 }
@@ -551,6 +566,7 @@ func TestXSSAnnotations(t *testing.T) {
 
 	// Submit annotation with XSS in every field
 	body, _ := json.Marshal(map[string]any{
+		"stamp":      solveStamp(8),
 		"author":     `<script>alert("author")</script>`,
 		"comment":    `<img src=x onerror=alert("comment")>`,
 		"quote":      `<script>alert("quote")</script>`,

@@ -83,6 +83,19 @@ body {
 .annotation-card.editable:hover .ann-delete { opacity: 1; }
 .ann-delete:hover { color: #666; }
 
+.ann-spinner {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border: 2px solid #e0e0e0;
+  border-top-color: #888;
+  border-radius: 50%;
+  animation: ann-spin 0.6s linear infinite;
+}
+@keyframes ann-spin { to { transform: rotate(360deg); } }
+
 .ann-edit-form { display: flex; flex-direction: column; gap: 0.3rem; }
 .ann-edit-form input {
   font-family: inherit;
@@ -294,11 +307,34 @@ footer a:hover { color: #666; }
 (function() {
   const PITCH_ID = {{.ID}};
   const READONLY = {{.Readonly}};
+  const POW_BITS = {{.PowBits}};
   const contentEl = document.getElementById('content');
   const gutterEl = document.getElementById('gutter');
 
   let pendingSelection = null;
   let annotations = [];
+
+  // PoW computation
+  async function computeStamp(bits) {
+    const ts = Math.floor(Date.now() / 1000);
+    const rand = Array.from(crypto.getRandomValues(new Uint8Array(8)))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    const prefix = 'pitchbin:1:' + ts + ':' + rand + ':';
+    for (let nonce = 0; ; nonce++) {
+      const stamp = prefix + nonce;
+      const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(stamp)));
+      if (hasLeadingZeroBits(hash, bits)) return stamp;
+      if (nonce % 1000 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+  }
+
+  function hasLeadingZeroBits(hash, bits) {
+    const fullBytes = bits >> 3;
+    const remainBits = bits & 7;
+    for (let i = 0; i < fullBytes; i++) { if (hash[i] !== 0) return false; }
+    if (remainBits > 0) { if ((hash[fullBytes] & (0xFF << (8 - remainBits))) !== 0) return false; }
+    return true;
+  }
 
   if (!READONLY) {
     function getTextOffset(container, node, offset) {
@@ -364,28 +400,48 @@ footer a:hover { color: #666; }
     function submitPending(author, comment) {
       if (!pendingSelection || !comment) return;
 
-      const body = {
-        author: author,
-        comment: comment,
-        quote: pendingSelection.quote,
-        text_start: pendingSelection.textStart,
-        text_end: pendingSelection.textEnd,
-      };
+      const sel = pendingSelection;
+      pendingSelection = null;
 
-      fetch('/api/' + PITCH_ID + '/annotations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+      // Show annotation immediately with spinner
+      const optimistic = {
+        id: 'submitting-' + Date.now(), pitch_id: PITCH_ID,
+        author: author, comment: comment, quote: sel.quote,
+        text_start: sel.textStart, text_end: sel.textEnd,
+        created: Math.floor(Date.now() / 1000),
+        editable: true, _submitting: true,
+      };
+      annotations = annotations.filter(x => !x._pending);
+      annotations.push(optimistic);
+      renderAnnotations();
+
+      // Compute PoW then submit
+      computeStamp(POW_BITS).then(function(stamp) {
+        const body = {
+          stamp: stamp,
+          author: author,
+          comment: comment,
+          quote: sel.quote,
+          text_start: sel.textStart,
+          text_end: sel.textEnd,
+        };
+        return fetch('/api/' + PITCH_ID + '/annotations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
       })
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(a => {
         localStorage.setItem('pitchbin-name', a.author);
-        annotations = annotations.filter(x => !x._pending);
+        annotations = annotations.filter(x => x.id !== optimistic.id);
         annotations.push(a);
-        pendingSelection = null;
         renderAnnotations();
       })
-      .catch(() => cancelPending());
+      .catch(function() {
+        annotations = annotations.filter(x => x.id !== optimistic.id);
+        renderAnnotations();
+      });
     }
   }
 
@@ -535,7 +591,7 @@ footer a:hover { color: #666; }
       if (topPos < lastCardBottom + 8) topPos = lastCardBottom + 8;
 
       const card = document.createElement('div');
-      card.className = 'annotation-card' + (a.editable && !a._pending ? ' editable' : '');
+      card.className = 'annotation-card' + (a.editable && !a._pending && !a._submitting ? ' editable' : '');
       card.style.top = topPos + 'px';
 
       if (a._pending) {
@@ -586,13 +642,14 @@ footer a:hover { color: #666; }
       const truncQuote = a.quote.length > 50 ? a.quote.slice(0, 50) + '...' : a.quote;
 
       card.innerHTML =
-        (a.editable && !READONLY ? '<span class="ann-delete" title="Delete">\u00d7</span>' : '') +
+        (a._submitting ? '<span class="ann-spinner" title="Computing proof of work\u2026"></span>' : '') +
+        (a.editable && !READONLY && !a._submitting ? '<span class="ann-delete" title="Delete">\u00d7</span>' : '') +
         '<div class="ann-author">' + escHtml(authorName) + '</div>' +
         '<div class="ann-quote">"' + escHtml(truncQuote) + '"</div>' +
         '<div class="ann-comment">' + escHtml(a.comment) + '</div>' +
-        '<div class="ann-time">' + timeStr + '</div>';
+        '<div class="ann-time">' + (a._submitting ? 'submitting\u2026' : timeStr) + '</div>';
 
-      if (a.editable && !READONLY) {
+      if (a.editable && !READONLY && !a._submitting) {
         card.querySelector('.ann-delete').addEventListener('click', function(e) {
           e.stopPropagation();
           fetch('/api/' + PITCH_ID + '/annotations/' + a.id, { method: 'DELETE' })

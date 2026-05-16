@@ -19,14 +19,15 @@ import (
 var templateFS embed.FS
 
 type Server struct {
-	store    *Store
-	renderer *Renderer
-	baseURL  string
-	powBits  int
-	maxSize  int
-	tmpl     *template.Template
-	limiter  *RateLimiter
-	mux      *http.ServeMux
+	store        *Store
+	renderer     *Renderer
+	baseURL      string
+	powBits      int
+	maxSize      int
+	tmpl         *template.Template
+	limiter      *RateLimiter
+	mux          *http.ServeMux
+	trustedProxy string
 }
 
 type pitchRequest struct {
@@ -57,20 +58,22 @@ type pitchPage struct {
 	BaseURL         string
 	Readonly        bool
 	AnnotationsJSON template.JS
+	PowBits         int
 }
 
-func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSize, rateLimit int) *Server {
+func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSize, rateLimit int, trustedProxy string) *Server {
 	tmpl := template.Must(template.ParseFS(templateFS, "templates/pitch.html"))
 
 	s := &Server{
-		store:    store,
-		renderer: renderer,
-		baseURL:  strings.TrimRight(baseURL, "/"),
-		powBits:  powBits,
-		maxSize:  maxSize,
-		tmpl:     tmpl,
-		limiter:  NewRateLimiter(rateLimit, time.Minute),
-		mux:      http.NewServeMux(),
+		store:        store,
+		renderer:     renderer,
+		baseURL:      strings.TrimRight(baseURL, "/"),
+		powBits:      powBits,
+		maxSize:      maxSize,
+		tmpl:         tmpl,
+		limiter:      NewRateLimiter(rateLimit, time.Minute),
+		mux:          http.NewServeMux(),
+		trustedProxy: trustedProxy,
 	}
 
 	s.mux.HandleFunc("GET /{$}", s.handleHome)
@@ -104,7 +107,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r)
+	ip := clientIP(r, s.trustedProxy)
 	if !s.limiter.Allow(ip) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limited"})
 		return
@@ -227,6 +230,7 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		ID:      pitch.ID,
 		RawURL:  s.baseURL + "/" + pitch.ID + "/raw",
 		BaseURL: s.baseURL,
+		PowBits: s.powBits,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -304,6 +308,7 @@ func (s *Server) handlePostAnnotation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
+		Stamp     string `json:"stamp"`
 		Author    string `json:"author"`
 		Comment   string `json:"comment"`
 		Quote     string `json:"quote"`
@@ -316,6 +321,21 @@ func (s *Server) handlePostAnnotation(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Comment == "" || req.Quote == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "comment and quote are required"})
+		return
+	}
+
+	if err := VerifyStamp(req.Stamp, s.powBits); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid proof of work: " + err.Error()})
+		return
+	}
+	stampHash := StampHash(req.Stamp)
+	ok, err := s.store.UseStamp(stampHash)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "stamp already used"})
 		return
 	}
 
@@ -442,12 +462,20 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.Index(xff, ","); i != -1 {
-			return strings.TrimSpace(xff[:i])
+func clientIP(r *http.Request, trustedProxy string) string {
+	if trustedProxy != "" {
+		remote := r.RemoteAddr
+		if i := strings.LastIndex(remote, ":"); i != -1 {
+			remote = remote[:i]
 		}
-		return strings.TrimSpace(xff)
+		if remote == trustedProxy {
+			if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+				if i := strings.Index(xff, ","); i != -1 {
+					return strings.TrimSpace(xff[:i])
+				}
+				return strings.TrimSpace(xff)
+			}
+		}
 	}
 	// Strip port
 	addr := r.RemoteAddr
@@ -496,4 +524,25 @@ func (rl *RateLimiter) Allow(key string) bool {
 
 	rl.entries[key] = append(valid, now)
 	return true
+}
+
+// Cleanup removes all expired entries from the rate limiter.
+func (rl *RateLimiter) Cleanup() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	cutoff := time.Now().Add(-rl.window)
+	for key, times := range rl.entries {
+		valid := times[:0]
+		for _, t := range times {
+			if t.After(cutoff) {
+				valid = append(valid, t)
+			}
+		}
+		if len(valid) == 0 {
+			delete(rl.entries, key)
+		} else {
+			rl.entries[key] = valid
+		}
+	}
 }

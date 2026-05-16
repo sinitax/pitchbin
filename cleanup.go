@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func RunCleanup(ctx context.Context, store *Store, interval time.Duration) {
+func RunCleanup(ctx context.Context, store *Store, limiter *RateLimiter, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -23,6 +23,7 @@ func RunCleanup(ctx context.Context, store *Store, interval time.Duration) {
 			if pitches > 0 || stamps > 0 {
 				log.Printf("cleanup: removed %d expired pitches, %d used stamps", pitches, stamps)
 			}
+			limiter.Cleanup()
 		}
 	}
 }
