@@ -1,0 +1,34 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - run: go test -count=1 -race ./...
+
+  cli:
+    runs-on: ubuntu-latest
+    needs: go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: go build -o pitchbin .
+      - name: Run CLI integration tests
+        run: |
+          ./pitchbin -addr :18956 -base-url http://localhost:18956 -pow-bits 8 -rate-limit 100 -db pitchbin-test.db &
+          sleep 1
+          node cli/test.mjs
