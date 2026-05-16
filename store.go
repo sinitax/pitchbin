@@ -201,6 +201,11 @@ func (s *Store) UpdateAnnotation(id int64, author, comment string) error {
 	return err
 }
 
+func (s *Store) DeleteAnnotation(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM annotations WHERE id = ?`, id)
+	return err
+}
+
 func (s *Store) UpdateAuthorBySession(pitchID, session, author string) error {
 	_, err := s.db.Exec(`UPDATE annotations SET author = ? WHERE pitch_id = ? AND session = ?`, author, pitchID, session)
 	return err

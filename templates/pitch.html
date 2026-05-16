@@ -64,7 +64,24 @@ body {
 .meta a { color: inherit; text-decoration: none; }
 .meta a:hover { text-decoration: underline; }
 
-.annotation-card.editable { cursor: pointer; }
+.annotation-card.editable { cursor: pointer; position: relative; }
+.ann-delete {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  line-height: 1.2rem;
+  text-align: center;
+  font-size: 0.7rem;
+  color: #999;
+  cursor: pointer;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.annotation-card.editable:hover .ann-delete { opacity: 1; }
+.ann-delete:hover { color: #c00; background: #fee; }
 
 .ann-edit-form { display: flex; flex-direction: column; gap: 0.3rem; }
 .ann-edit-form input {
@@ -472,6 +489,14 @@ footer a:hover { color: #666; }
     });
 
     commentInput.focus();
+
+    function onClickOutside(e) {
+      if (!card.contains(e.target)) {
+        document.removeEventListener('mousedown', onClickOutside);
+        renderAnnotations();
+      }
+    }
+    setTimeout(() => document.addEventListener('mousedown', onClickOutside), 0);
   }
 
   function renderAnnotations() {
@@ -553,13 +578,25 @@ footer a:hover { color: #666; }
       const truncQuote = a.quote.length > 50 ? a.quote.slice(0, 50) + '...' : a.quote;
 
       card.innerHTML =
+        (a.editable && !READONLY ? '<span class="ann-delete" title="Delete">\u00d7</span>' : '') +
         '<div class="ann-author">' + escHtml(authorName) + '</div>' +
         '<div class="ann-quote">"' + escHtml(truncQuote) + '"</div>' +
         '<div class="ann-comment">' + escHtml(a.comment) + '</div>' +
         '<div class="ann-time">' + timeStr + '</div>';
 
       if (a.editable && !READONLY) {
-        card.addEventListener('click', function() { editAnnotation(card, a); });
+        card.querySelector('.ann-delete').addEventListener('click', function(e) {
+          e.stopPropagation();
+          fetch('/api/' + PITCH_ID + '/annotations/' + a.id, { method: 'DELETE' })
+            .then(function() {
+              annotations = annotations.filter(x => x.id !== a.id);
+              renderAnnotations();
+            });
+        });
+        card.addEventListener('click', function(e) {
+          if (e.target.classList.contains('ann-delete')) return;
+          editAnnotation(card, a);
+        });
       }
 
       if (mark) {

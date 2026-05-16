@@ -80,6 +80,7 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSiz
 	s.mux.HandleFunc("GET /api/{id}/annotations", s.handleGetAnnotations)
 	s.mux.HandleFunc("POST /api/{id}/annotations", s.handlePostAnnotation)
 	s.mux.HandleFunc("PUT /api/{id}/annotations/{aid}", s.handleUpdateAnnotation)
+	s.mux.HandleFunc("DELETE /api/{id}/annotations/{aid}", s.handleDeleteAnnotation)
 	s.mux.HandleFunc("GET /{id}/raw", s.handleRaw)
 	s.mux.HandleFunc("GET /{id}", s.handleView)
 
@@ -387,6 +388,34 @@ func (s *Server) handleUpdateAnnotation(w http.ResponseWriter, r *http.Request) 
 	}
 	a.Editable = true
 	writeJSON(w, http.StatusOK, a)
+}
+
+func (s *Server) handleDeleteAnnotation(w http.ResponseWriter, r *http.Request) {
+	sess := getSession(w, r)
+	aidStr := r.PathValue("aid")
+	aid, err := strconv.ParseInt(aidStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid annotation id"})
+		return
+	}
+
+	a, err := s.store.GetAnnotation(aid)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	if a.Session != sess {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your annotation"})
+		return
+	}
+
+	s.store.DeleteAnnotation(aid)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func handleRobots(w http.ResponseWriter, r *http.Request) {
