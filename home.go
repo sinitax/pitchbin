@@ -99,21 +99,6 @@ func wantsMarkdown(r *http.Request) bool {
 
 const homeID = "_home"
 
-func (s *Server) ensureHomePitch() {
-	if s.store.PitchExists(homeID) {
-		return
-	}
-	s.store.InsertPitch(&Pitch{
-		ID:       homeID,
-		Title:    "pitchbin",
-		Author:   "sinitax",
-		Markdown: homeMarkdown,
-		HTML:     "",
-		Created:  time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC).Unix(),
-		Expires:  0,
-	})
-}
-
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	if wantsMarkdown(r) {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
@@ -121,7 +106,6 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.ensureHomePitch()
 	s.store.IncrementViews(homeID)
 
 	var views int64
@@ -129,18 +113,11 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		views = p.Views
 	}
 
-	html, err := s.renderer.Render([]byte(homeMarkdown))
-	if err != nil {
-		log.Printf("home render error: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
 	page := pitchPage{
 		Title:           "pitchbin",
 		Author:          "sinitax",
 		AuthorURL:       "https://sinitax.com",
-		HTML:            template.HTML(html),
+		HTML:            template.HTML(s.homeHTML),
 		Created:         time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC),
 		Views:           views,
 		ID:              "",

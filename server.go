@@ -28,6 +28,7 @@ type Server struct {
 	limiter      *RateLimiter
 	mux          *http.ServeMux
 	trustedProxy string
+	homeHTML     string
 }
 
 type pitchRequest struct {
@@ -64,6 +65,24 @@ type pitchPage struct {
 func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSize, rateLimit int, trustedProxy string) *Server {
 	tmpl := template.Must(template.ParseFS(templateFS, "templates/pitch.html"))
 
+	homeHTML, err := renderer.Render([]byte(homeMarkdown))
+	if err != nil {
+		log.Fatalf("failed to render home page: %v", err)
+	}
+
+	// Seed the home pitch row for view counting
+	if !store.PitchExists(homeID) {
+		store.InsertPitch(&Pitch{
+			ID:       homeID,
+			Title:    "pitchbin",
+			Author:   "sinitax",
+			Markdown: homeMarkdown,
+			HTML:     homeHTML,
+			Created:  time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC).Unix(),
+			Expires:  0,
+		})
+	}
+
 	s := &Server{
 		store:        store,
 		renderer:     renderer,
@@ -74,6 +93,7 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, maxSiz
 		limiter:      NewRateLimiter(rateLimit, time.Minute),
 		mux:          http.NewServeMux(),
 		trustedProxy: trustedProxy,
+		homeHTML:     homeHTML,
 	}
 
 	s.mux.HandleFunc("GET /{$}", s.handleHome)
