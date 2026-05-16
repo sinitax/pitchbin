@@ -481,9 +481,9 @@ footer a:hover { color: #666; }
     });
 
     commentInput.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        card.querySelector('.save').click();
+        saveAndClose();
       }
       if (e.key === 'Escape') renderAnnotations();
     });
@@ -564,7 +564,7 @@ footer a:hover { color: #666; }
           submitPending(authorInput.value.trim(), commentInput.value.trim());
         });
         commentInput.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             submitPending(authorInput.value.trim(), commentInput.value.trim());
           }
