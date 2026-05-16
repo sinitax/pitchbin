@@ -592,6 +592,7 @@ footer a:hover { color: #666; }
 
       const card = document.createElement('div');
       card.className = 'annotation-card' + (a.editable && !a._pending && !a._submitting ? ' editable' : '');
+      card.id = 'ann-' + a.id;
       card.style.top = topPos + 'px';
 
       if (a._pending) {
@@ -660,8 +661,14 @@ footer a:hover { color: #666; }
         });
         card.addEventListener('click', function(e) {
           if (e.target.classList.contains('ann-delete')) return;
+          history.replaceState(null, '', '#ann-' + a.id);
           const clickedAuthor = e.target.closest('.ann-author');
           editAnnotation(card, a, clickedAuthor ? 'author' : 'comment');
+        });
+      } else if (!a._pending && !a._submitting) {
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', function() {
+          history.replaceState(null, '', '#ann-' + a.id);
         });
       }
 
@@ -671,13 +678,14 @@ footer a:hover { color: #666; }
         card.addEventListener('mouseleave', () => m.style.background = '');
         m.addEventListener('mouseenter', () => card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)');
         m.addEventListener('mouseleave', () => card.style.boxShadow = '');
-        if (a.editable && !READONLY) {
-          m.style.cursor = 'pointer';
-          m.addEventListener('click', function(e) {
-            e.stopPropagation();
+        m.style.cursor = 'pointer';
+        m.addEventListener('click', function(e) {
+          e.stopPropagation();
+          history.replaceState(null, '', '#ann-' + a.id);
+          if (a.editable && !READONLY) {
             editAnnotation(card, a, 'comment');
-          });
-        }
+          }
+        });
       });
 
       gutterEl.appendChild(card);
@@ -695,18 +703,41 @@ footer a:hover { color: #666; }
     return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  function slugify(text) {
+    return text.toLowerCase().replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  // Add IDs to headings and make them set the hash on click
+  contentEl.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach(function(h) {
+    const id = slugify(h.textContent);
+    h.id = id;
+    h.style.cursor = 'pointer';
+    h.addEventListener('click', function() {
+      history.replaceState(null, '', '#' + id);
+    });
+  });
+
+  function scrollToHash() {
+    const hash = location.hash.slice(1);
+    if (!hash) return;
+    const el = document.getElementById(hash);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   // Load annotations
   {{if .Readonly}}
   annotations = {{.AnnotationsJSON}};
   if (annotations.length) renderAnnotations();
+  scrollToHash();
   {{else}}
   fetch('/api/' + PITCH_ID + '/annotations')
     .then(r => r.json())
     .then(function(data) {
       annotations = data || [];
       if (annotations.length) renderAnnotations();
+      scrollToHash();
     })
-    .catch(() => {});
+    .catch(() => { scrollToHash(); });
   {{end}}
 })();
 </script>
