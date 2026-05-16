@@ -36,5 +36,20 @@ check: fmt vet test
 act:
     act push -W .github/workflows/test.yml
 
+dev: build
+    #!/usr/bin/env bash
+    set -e
+    ./pitchbin -addr :8080 -base-url http://localhost:8080 &
+    PID=$!
+    trap "kill $PID 2>/dev/null; exit" EXIT INT TERM
+    while inotifywait -q -r -e modify,create,delete --include '\.(go|html|css|js)$' . ; do
+        kill $PID 2>/dev/null
+        wait $PID 2>/dev/null || true
+        go build -o pitchbin . && {
+            ./pitchbin -addr :8080 -base-url http://localhost:8080 &
+            PID=$!
+        }
+    done
+
 deploy HOST:
     ssh {{HOST}} "cd pitchbin && ln -sf compose.traefik.yaml docker/compose.override.yaml && docker compose -f docker/compose.yaml up -d --build"

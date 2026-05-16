@@ -571,10 +571,21 @@ footer a:hover { color: #666; }
       const newComment = commentInput.value.trim();
       if (!newComment) return;
 
-      fetch('/api/' + PITCH_ID + '/annotations/' + a.id, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ author: newAuthor, comment: newComment }),
+      // Show spinner while computing PoW
+      var truncQuote2 = a.quote.length > 50 ? a.quote.slice(0, 50) + '...' : a.quote;
+      card.innerHTML =
+        '<span class="ann-spinner" title="Computing proof of work\u2026"></span>' +
+        '<div class="ann-author">' + escHtml(newAuthor || 'anonymous') + '</div>' +
+        '<div class="ann-quote">"' + escHtml(truncQuote2) + '"</div>' +
+        '<div class="ann-comment">' + escHtml(newComment) + '</div>' +
+        '<div class="ann-time">solving PoW\u2026</div>';
+
+      computeStamp(POW_BITS).then(function(stamp) {
+        return fetch('/api/' + PITCH_ID + '/annotations/' + a.id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stamp: stamp, author: newAuthor, comment: newComment }),
+        });
       })
       .then(function(r) {
         if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || r.status); });

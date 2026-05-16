@@ -419,11 +419,27 @@ func (s *Server) handleUpdateAnnotation(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req struct {
+		Stamp   string `json:"stamp"`
 		Author  string `json:"author"`
 		Comment string `json:"comment"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	if err := VerifyStamp(req.Stamp, s.annotationPowBits); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid proof of work: " + err.Error()})
+		return
+	}
+	stampHash := StampHash(req.Stamp)
+	ok, err2 := s.store.UseStamp(stampHash)
+	if err2 != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "stamp already used"})
 		return
 	}
 
