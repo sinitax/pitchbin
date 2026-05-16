@@ -164,6 +164,7 @@ mark.annotation-hl {
 }
 
 mark.annotation-hl:hover { background: #ffe566; }
+mark.annotation-hl.pending { background: #ffe066; border-bottom-style: dashed; }
 
 /* Annotation cards in gutter */
 .annotation-card {
@@ -361,6 +362,12 @@ footer a:hover { color: #666; }
 
       pendingSelection = { quote, textStart, textEnd };
 
+      // Show pending highlight
+      clearPendingHighlight();
+      highlightRange(textStart, textEnd, 'pending');
+      contentEl.querySelectorAll('mark[data-annotation-id="pending"]').forEach(m => m.classList.add('pending'));
+      window.getSelection().removeAllRanges();
+
       popup.style.display = 'block';
       popup.style.left = Math.min(lastRect.right + 8, window.innerWidth - 280) + 'px';
       popup.style.top = (lastRect.bottom + window.scrollY + 4) + 'px';
@@ -384,10 +391,19 @@ footer a:hover { color: #666; }
       if (e.key === 'Escape') closePopup();
     });
 
+    function clearPendingHighlight() {
+      contentEl.querySelectorAll('mark.pending').forEach(m => {
+        const parent = m.parentNode;
+        while (m.firstChild) parent.insertBefore(m.firstChild, m);
+        parent.removeChild(m);
+      });
+      contentEl.normalize();
+    }
+
     window.closePopup = function() {
       popup.style.display = 'none';
       pendingSelection = null;
-      window.getSelection().removeAllRanges();
+      clearPendingHighlight();
     };
 
     window.submitComment = function() {
