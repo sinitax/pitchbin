@@ -490,11 +490,19 @@ footer a:hover { color: #666; }
 
     (focusTarget === 'author' ? authorInput : commentInput).focus();
 
-    function onClickOutside(e) {
-      if (!card.contains(e.target)) {
-        document.removeEventListener('mousedown', onClickOutside);
+    function saveAndClose() {
+      document.removeEventListener('mousedown', onClickOutside);
+      const newAuthor = authorInput.value.trim();
+      const newComment = commentInput.value.trim();
+      if (!newComment || (newComment === a.comment && newAuthor === a.author)) {
         renderAnnotations();
+        return;
       }
+      card.querySelector('.save').click();
+    }
+
+    function onClickOutside(e) {
+      if (!card.contains(e.target)) saveAndClose();
     }
     setTimeout(() => document.addEventListener('mousedown', onClickOutside), 0);
   }
