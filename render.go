@@ -8,6 +8,7 @@ import (
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/renderer/html"
+	abbreviations "github.com/zmtcreative/gm-abbreviations"
 )
 
 type Renderer struct {
@@ -20,9 +21,12 @@ func NewRenderer() *Renderer {
 		goldmark.WithExtensions(
 			extension.GFM,
 			extension.Typographer,
+			extension.NewFootnote(),
+			extension.DefinitionList,
 			highlighting.NewHighlighting(
 				highlighting.WithStyle("github"),
 			),
+			abbreviations.NewAbbreviations(),
 		),
 		goldmark.WithRendererOptions(
 			html.WithUnsafe(),
@@ -32,6 +36,13 @@ func NewRenderer() *Renderer {
 	policy := bluemonday.UGCPolicy()
 	policy.AllowAttrs("class").Matching(bluemonday.SpaceSeparatedTokens).OnElements("code", "pre", "span", "div")
 	policy.AllowStyles("color", "background-color", "font-weight", "font-style", "text-decoration").OnElements("span", "pre", "code")
+	// Footnotes
+	policy.AllowAttrs("id", "class", "href").OnElements("a")
+	policy.AllowAttrs("id", "class").OnElements("section", "sup", "li", "ol")
+	// Definition lists
+	policy.AllowElements("dl", "dt", "dd")
+	// Abbreviations
+	policy.AllowAttrs("title").OnElements("abbr")
 
 	return &Renderer{md: md, policy: policy}
 }

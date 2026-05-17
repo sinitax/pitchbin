@@ -606,6 +606,46 @@ func TestXSSAnnotations(t *testing.T) {
 	}
 }
 
+func TestMarkdownExtensions(t *testing.T) {
+	r := NewRenderer()
+
+	tests := []struct {
+		name    string
+		input   string
+		require []string
+	}{
+		{
+			name:    "footnotes",
+			input:   "Hello[^1]\n\n[^1]: A footnote\n",
+			require: []string{"<sup", "footnote"},
+		},
+		{
+			name:    "definition list",
+			input:   "Term\n:   Definition here\n",
+			require: []string{"<dl>", "<dt>Term</dt>", "<dd>Definition here</dd>"},
+		},
+		{
+			name:    "abbreviations",
+			input:   "The HTML spec is great.\n\n*[HTML]: Hyper Text Markup Language\n",
+			require: []string{"<abbr", "Hyper Text Markup Language"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := r.Render([]byte(tt.input))
+			if err != nil {
+				t.Fatalf("render error: %v", err)
+			}
+			for _, want := range tt.require {
+				if !strings.Contains(out, want) {
+					t.Errorf("output missing %q:\n%s", want, out)
+				}
+			}
+		})
+	}
+}
+
 func readBody(t *testing.T, r io.Reader) string {
 	t.Helper()
 	b, err := io.ReadAll(r)
