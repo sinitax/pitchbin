@@ -250,10 +250,15 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		expires = &t
 	}
 
+	renderedHTML, err := s.renderer.Render([]byte(pitch.Markdown))
+	if err != nil {
+		renderedHTML = pitch.HTML
+	}
+
 	page := pitchPage{
 		Title:   pitch.Title,
 		Author:  pitch.Author,
-		HTML:    template.HTML(pitch.HTML),
+		HTML:    template.HTML(renderedHTML),
 		Created: created,
 		Expires: expires,
 		Views:   pitch.Views + 1,
