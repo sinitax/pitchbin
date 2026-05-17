@@ -631,6 +631,11 @@ func TestFrontmatterStripping(t *testing.T) {
 			input:   "---\ntitle: Hello\n# Body",
 			require: []string{"Body"},
 		},
+		{
+			name:    "newline between words preserved",
+			input:   "---\ntitle: Hello\n---\nword1\nword2\n",
+			require: []string{"word1\nword2"},
+		},
 	}
 
 	for _, tt := range tests {

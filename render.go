@@ -55,11 +55,14 @@ func StripFrontmatter(markdown []byte) []byte {
 	if !strings.HasPrefix(s, "---\n") {
 		return markdown
 	}
-	end := strings.Index(s[4:], "\n---")
-	if end < 0 {
-		return markdown
+	lines := strings.SplitAfter(s[4:], "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimRight(line, " \t\r\n")
+		if trimmed == "---" {
+			return []byte(strings.Join(lines[i+1:], ""))
+		}
 	}
-	return []byte(strings.TrimLeft(s[4+end+4:], "\n"))
+	return markdown
 }
 
 func (r *Renderer) Render(markdown []byte) (string, error) {
