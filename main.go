@@ -22,6 +22,7 @@ func main() {
 	maxSize := flag.Int("max-size", 512000, "max markdown size in bytes")
 	rateLimit := flag.Int("rate-limit", 5, "submissions per minute per IP")
 	trustedProxy := flag.String("trusted-proxy", "", "IP of trusted reverse proxy (enables X-Forwarded-For)")
+	devMode := flag.Bool("dev", false, "development mode (re-render markdown on each view)")
 	flag.Parse()
 
 	if *baseURL == "" {
@@ -43,7 +44,7 @@ func main() {
 
 	renderer := NewRenderer()
 
-	srv := NewServer(store, renderer, *baseURL, *powBits, *annotationPowBits, *maxSize, *rateLimit, *trustedProxy)
+	srv := NewServer(store, renderer, *baseURL, *powBits, *annotationPowBits, *maxSize, *rateLimit, *trustedProxy, *devMode)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

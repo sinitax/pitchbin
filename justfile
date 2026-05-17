@@ -41,14 +41,14 @@ dev host="localhost" port="8080": build
     set -e
     ADDR="{{host}}:{{port}}"
     BASE_URL="http://${ADDR}"
-    ./pitchbin -addr "$ADDR" -base-url "$BASE_URL" &
+    ./pitchbin -dev -addr "$ADDR" -base-url "$BASE_URL" &
     PID=$!
     trap "kill $PID 2>/dev/null; exit" EXIT INT TERM
     while inotifywait -q -r -e modify,create,delete --include '\.(go|html|css|js)$' . ; do
         kill $PID 2>/dev/null
         wait $PID 2>/dev/null || true
         go build -o pitchbin . && {
-            ./pitchbin -addr "$ADDR" -base-url "$BASE_URL" &
+            ./pitchbin -dev -addr "$ADDR" -base-url "$BASE_URL" &
             PID=$!
         }
     done

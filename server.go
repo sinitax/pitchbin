@@ -32,6 +32,7 @@ type Server struct {
 	limiter           *RateLimiter
 	mux               *http.ServeMux
 	trustedProxy      string
+	devMode           bool
 	homeHTML          string
 }
 
@@ -66,7 +67,7 @@ type pitchPage struct {
 	PowBits         int
 }
 
-func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annotationPowBits, maxSize, rateLimit int, trustedProxy string) *Server {
+func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annotationPowBits, maxSize, rateLimit int, trustedProxy string, devMode bool) *Server {
 	tmpl := template.Must(template.ParseFS(templateFS, "templates/pitch.html"))
 
 	homeHTML, err := renderer.Render([]byte(homeMarkdown))
@@ -98,6 +99,7 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annota
 		limiter:           NewRateLimiter(rateLimit, time.Minute),
 		mux:               http.NewServeMux(),
 		trustedProxy:      trustedProxy,
+		devMode:           devMode,
 		homeHTML:          homeHTML,
 	}
 
@@ -250,9 +252,11 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		expires = &t
 	}
 
-	renderedHTML, err := s.renderer.Render([]byte(pitch.Markdown))
-	if err != nil {
-		renderedHTML = pitch.HTML
+	renderedHTML := pitch.HTML
+	if s.devMode {
+		if h, err := s.renderer.Render([]byte(pitch.Markdown)); err == nil {
+			renderedHTML = h
+		}
 	}
 
 	page := pitchPage{
