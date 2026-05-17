@@ -9,7 +9,6 @@ import (
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/renderer/html"
-	abbreviations "github.com/zmtcreative/gm-abbreviations"
 )
 
 type Renderer struct {
@@ -27,7 +26,7 @@ func NewRenderer() *Renderer {
 			highlighting.NewHighlighting(
 				highlighting.WithStyle("github"),
 			),
-			abbreviations.NewAbbreviations(),
+			&Abbreviations{},
 		),
 		goldmark.WithRendererOptions(
 			html.WithUnsafe(),
