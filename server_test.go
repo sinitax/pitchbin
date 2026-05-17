@@ -606,6 +606,53 @@ func TestXSSAnnotations(t *testing.T) {
 	}
 }
 
+func TestFrontmatterStripping(t *testing.T) {
+	r := NewRenderer()
+
+	tests := []struct {
+		name    string
+		input   string
+		require []string
+		reject  []string
+	}{
+		{
+			name:    "with frontmatter",
+			input:   "---\ntitle: Hello\nauthor: me\n---\n# Body\n\nText",
+			require: []string{"<h1>Body</h1>", "Text"},
+			reject:  []string{"title:", "author:"},
+		},
+		{
+			name:    "no frontmatter",
+			input:   "# Body\n\nText",
+			require: []string{"<h1>Body</h1>"},
+		},
+		{
+			name:    "unclosed frontmatter treated as content",
+			input:   "---\ntitle: Hello\n# Body",
+			require: []string{"Body"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := r.Render([]byte(tt.input))
+			if err != nil {
+				t.Fatalf("render error: %v", err)
+			}
+			for _, want := range tt.require {
+				if !strings.Contains(out, want) {
+					t.Errorf("output missing %q:\n%s", want, out)
+				}
+			}
+			for _, bad := range tt.reject {
+				if strings.Contains(out, bad) {
+					t.Errorf("output should not contain %q:\n%s", bad, out)
+				}
+			}
+		})
+	}
+}
+
 func TestMarkdownExtensions(t *testing.T) {
 	r := NewRenderer()
 

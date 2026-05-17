@@ -57,6 +57,16 @@ function readMarkdown(file) {
   return readFileSync(file, "utf-8");
 }
 
+function parseFrontmatterTitle(markdown) {
+  if (!markdown.startsWith("---\n")) return null;
+  const end = markdown.indexOf("\n---", 4);
+  if (end < 0) return null;
+  const fm = markdown.slice(4, end);
+  const match = fm.match(/^title:\s*(.+)$/m);
+  if (!match) return null;
+  return match[1].trim().replace(/^["']|["']$/g, "");
+}
+
 function hasLeadingZeroBits(hash, bits) {
   const fullBytes = bits >> 3;
   const remainBits = bits & 7;
@@ -114,14 +124,19 @@ async function main() {
   const opts = parseArgs();
   const markdown = readMarkdown(opts.file);
 
-  // Extract title from first heading if not provided
+  // Extract title: --title > frontmatter title > first h1 > "Untitled" (private)
   if (!opts.title) {
-    const match = markdown.match(/^#\s+(.+)$/m);
-    if (match) {
-      opts.title = match[1].trim();
+    const fmTitle = parseFrontmatterTitle(markdown);
+    if (fmTitle) {
+      opts.title = fmTitle;
     } else {
-      opts.title = "Untitled";
-      opts.private = true;
+      const match = markdown.match(/^#\s+(.+)$/m);
+      if (match) {
+        opts.title = match[1].trim();
+      } else {
+        opts.title = "Untitled";
+        opts.private = true;
+      }
     }
   }
 

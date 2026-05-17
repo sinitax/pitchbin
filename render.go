@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
@@ -47,9 +48,24 @@ func NewRenderer() *Renderer {
 	return &Renderer{md: md, policy: policy}
 }
 
+// StripFrontmatter removes YAML frontmatter (--- delimited) from markdown,
+// returning the body without it.
+func StripFrontmatter(markdown []byte) []byte {
+	s := string(markdown)
+	if !strings.HasPrefix(s, "---\n") {
+		return markdown
+	}
+	end := strings.Index(s[4:], "\n---")
+	if end < 0 {
+		return markdown
+	}
+	return []byte(strings.TrimLeft(s[4+end+4:], "\n"))
+}
+
 func (r *Renderer) Render(markdown []byte) (string, error) {
+	body := StripFrontmatter(markdown)
 	var buf bytes.Buffer
-	if err := r.md.Convert(markdown, &buf); err != nil {
+	if err := r.md.Convert(body, &buf); err != nil {
 		return "", err
 	}
 	safe := r.policy.SanitizeBytes(buf.Bytes())
