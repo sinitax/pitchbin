@@ -117,7 +117,12 @@ async function main() {
   // Extract title from first heading if not provided
   if (!opts.title) {
     const match = markdown.match(/^#\s+(.+)$/m);
-    opts.title = match ? match[1].trim() : "Untitled";
+    if (match) {
+      opts.title = match[1].trim();
+    } else {
+      opts.title = "Untitled";
+      opts.private = true;
+    }
   }
 
   // Auto-detect difficulty from server
