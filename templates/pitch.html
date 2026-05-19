@@ -35,8 +35,9 @@ body {
 .annotations-gutter {
   width: 280px;
   flex-shrink: 0;
-  position: relative;
   padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .meta {
@@ -253,9 +254,7 @@ mark.annotation-hl:hover { background: #ffe566; }
 
 /* Annotation cards in gutter */
 .annotation-card {
-  position: absolute;
-  left: 0;
-  right: 0;
+  position: relative;
   background: #fff;
   border: 1px solid #e0e0e0;
   border-left: 3px solid #e6c300;
@@ -729,22 +728,23 @@ footer a:hover { color: #666; }
 
       let topPos = 0;
       if (mark) {
-        const markTop = mark.getBoundingClientRect().top;
-        const gutterTop = gutterEl.getBoundingClientRect().top;
-        // Compensate for CSS zoom/transforms: BCR returns viewport-scaled
-        // coords but position:absolute top uses local coords
-        const bcrH = gutterEl.getBoundingClientRect().height;
-        const localH = gutterEl.offsetHeight;
-        const scale = localH > 0 ? bcrH / localH : 1;
-        topPos = (markTop - gutterTop) / scale;
+        topPos = mark.offsetTop - gutterEl.offsetTop;
       }
 
       if (topPos < lastCardBottom + 8) topPos = lastCardBottom + 8;
 
+      // Use spacer div to push card to target position (avoids position:absolute issues)
+      const gap = topPos - lastCardBottom;
+      if (gap > 0) {
+        const spacer = document.createElement('div');
+        spacer.style.height = gap + 'px';
+        spacer.style.flexShrink = '0';
+        gutterEl.appendChild(spacer);
+      }
+
       const card = document.createElement('div');
       card.className = 'annotation-card' + (a.editable && !a._pending && !a._submitting ? ' editable' : '');
       card.id = '' + a.id;
-      card.style.top = topPos + 'px';
 
       if (a._pending) {
         // Render as inline edit form for new comment
