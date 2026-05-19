@@ -344,7 +344,8 @@ footer a:hover { color: #666; }
 
     <footer>
       <span><a href="{{.BaseURL}}">pitchbin</a></span>
-      {{if not .Readonly}}<span><a href="{{.RawURL}}">raw</a></span>{{end}}
+      {{if not .Readonly}}<span><a href="{{.BaseURL}}/{{.ID}}/raw">original</a></span>
+      <span><a href="{{.BaseURL}}/{{.ID}}/annotated">annotated</a></span>{{end}}
     </footer>
   </div>
 

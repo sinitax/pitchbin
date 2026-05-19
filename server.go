@@ -133,6 +133,7 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annota
 	s.mux.HandleFunc("GET /q3-migration-plan", handleExampleRedirect)
 	s.mux.HandleFunc("GET /auth-module-review", handleExampleRedirect)
 	s.mux.HandleFunc("GET /{id}/raw", s.handleRaw)
+	s.mux.HandleFunc("GET /{id}/annotated", s.handleAnnotated)
 	s.mux.HandleFunc("GET /{id}", s.handleView)
 
 	return s
@@ -482,6 +483,99 @@ func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Write([]byte(pitch.Markdown))
+}
+
+func (s *Server) handleAnnotated(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	pitch, err := s.store.GetPitch(id)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	if pitch.Expires > 0 && pitch.Expires < time.Now().Unix() {
+		http.NotFound(w, r)
+		return
+	}
+
+	annotations, err := s.store.GetAnnotations(id)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	result := toCriticMarkup(pitch.Markdown, annotations)
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Write([]byte(result))
+}
+
+// toCriticMarkup inserts CriticMarkup comment markers into markdown
+// for each annotation, matching by quote text.
+func toCriticMarkup(markdown string, annotations []Annotation) string {
+	if len(annotations) == 0 {
+		return markdown
+	}
+
+	// Process annotations from end to start so insertions don't shift offsets
+	// Sort by position in markdown (find each quote, work backwards)
+	type match struct {
+		pos     int
+		end     int
+		comment string
+		author  string
+	}
+	var matches []match
+	used := make(map[int]bool) // track used positions to avoid duplicates
+
+	for _, a := range annotations {
+		if a.Quote == "" {
+			continue
+		}
+		// Find the quote in markdown, starting from the beginning
+		searchFrom := 0
+		idx := strings.Index(markdown[searchFrom:], a.Quote)
+		for idx >= 0 {
+			absIdx := searchFrom + idx
+			if !used[absIdx] {
+				used[absIdx] = true
+				author := a.Author
+				if author == "" {
+					author = "anonymous"
+				}
+				matches = append(matches, match{
+					pos:     absIdx,
+					end:     absIdx + len(a.Quote),
+					comment: a.Comment,
+					author:  author,
+				})
+				break
+			}
+			searchFrom = absIdx + 1
+			idx = strings.Index(markdown[searchFrom:], a.Quote)
+		}
+	}
+
+	// Sort by position descending so we can insert from end
+	for i := 0; i < len(matches); i++ {
+		for j := i + 1; j < len(matches); j++ {
+			if matches[j].pos > matches[i].pos {
+				matches[i], matches[j] = matches[j], matches[i]
+			}
+		}
+	}
+
+	result := markdown
+	for _, m := range matches {
+		marker := "{>>" + m.author + ": " + m.comment + "<<}"
+		result = result[:m.end] + marker + result[m.end:]
+	}
+
+	return result
 }
 
 func getSession(w http.ResponseWriter, r *http.Request) string {
