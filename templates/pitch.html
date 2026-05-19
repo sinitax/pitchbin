@@ -553,7 +553,7 @@ footer a:hover { color: #666; }
     }
   }
 
-  function highlightRange(textStart, textEnd, annotationId) {
+  function findRangeByOffset(textStart, textEnd) {
     const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
     let pos = 0;
     const segments = [];
@@ -571,6 +571,23 @@ footer a:hover { color: #666; }
       }
       pos += len;
       if (pos >= textEnd) break;
+    }
+    return segments;
+  }
+
+  function findRangeByQuote(quote) {
+    const fullText = contentEl.textContent;
+    const idx = fullText.indexOf(quote);
+    if (idx < 0) return [];
+    return findRangeByOffset(idx, idx + quote.length);
+  }
+
+  function highlightRange(textStart, textEnd, quote, annotationId) {
+    // Try stored offsets first, fall back to quote search
+    let segments = findRangeByOffset(textStart, textEnd);
+    const matched = segments.map(s => s.node.textContent.substring(s.from, s.to)).join('');
+    if (matched !== quote && quote) {
+      segments = findRangeByQuote(quote);
     }
 
     segments.forEach(function(seg) {
@@ -702,7 +719,7 @@ footer a:hover { color: #666; }
     let lastCardBottom = 0;
 
     annotations.forEach(function(a) {
-      highlightRange(a.text_start, a.text_end, a.id);
+      highlightRange(a.text_start, a.text_end, a.quote, a.id);
 
       const mark = contentEl.querySelector('mark[data-annotation-id="' + a.id + '"]');
 
