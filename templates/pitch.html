@@ -312,20 +312,20 @@ footer a { color: #999; text-decoration: none; }
 footer a:hover { color: #666; }
 
 @media (max-width: 1100px) {
+  .page { overflow-x: clip; }
   .annotations-gutter {
-    position: fixed;
+    position: absolute;
     top: 0;
     right: 0;
-    bottom: 0;
     width: 300px;
     max-width: 85vw;
     background: #fafafa;
     box-shadow: -2px 0 12px rgba(0,0,0,0.15);
     z-index: 100;
-    overflow-y: auto;
     transform: translateX(100%);
     transition: transform 0.25s ease;
-    padding: 0.75rem 1rem;
+    padding: 0 1rem;
+    min-height: 100%;
   }
   .annotations-gutter.open { transform: translateX(0); }
   .gutter-backdrop {
@@ -338,20 +338,22 @@ footer a:hover { color: #666; }
   .gutter-backdrop.open { display: block; }
   .gutter-close {
     display: block;
-    position: sticky;
-    top: 0;
-    text-align: right;
-    margin-bottom: 0.25rem;
-    z-index: 1;
+    position: fixed;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 101;
   }
   .gutter-close button {
-    background: none;
-    border: none;
-    font-size: 1.4rem;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 50%;
+    font-size: 1.2rem;
     color: #666;
     cursor: pointer;
-    padding: 0.2rem 0.4rem;
+    width: 2rem;
+    height: 2rem;
     line-height: 1;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   }
   .gutter-close button:hover { color: #333; }
 }
@@ -888,10 +890,12 @@ footer a:hover { color: #666; }
         card.addEventListener('click', function(e) {
           if (e.target.classList.contains('ann-delete')) return;
           history.replaceState(null, '', '#' + a.id);
+          scrollToAnnotation(a.id);
         });
       } else if (!a._pending && !a._submitting) {
         card.addEventListener('click', function() {
           history.replaceState(null, '', '#' + a.id);
+          scrollToAnnotation(a.id);
         });
       }
 
@@ -947,6 +951,16 @@ footer a:hover { color: #666; }
     activeHighlight = null;
   }
 
+  function scrollToAnnotation(id) {
+    closeGutter();
+    const marks = contentEl.querySelectorAll('mark[data-annotation-id="' + id + '"]');
+    if (!marks.length) return;
+    marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Brief flash to draw attention
+    marks.forEach(m => m.style.background = '#ffe566');
+    setTimeout(() => marks.forEach(m => m.style.background = ''), 2000);
+  }
+
   function highlightAnnotation(id) {
     clearActiveHighlight();
     const card = document.getElementById('' + id);
@@ -986,6 +1000,10 @@ footer a:hover { color: #666; }
       scrollToHash();
     })
     .catch(() => { scrollToHash(); });
+  window._pitchbinRerender = function() {
+    if (annotations.length) renderAnnotations();
+  };
+
   {{end}}
 })();
 </script>
@@ -1002,7 +1020,13 @@ footer a:hover { color: #666; }
   });
   const s = document.createElement('script');
   s.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
-  s.onload = function() { mermaid.initialize({ startOnLoad: true, theme: 'neutral' }); };
+  s.onload = function() {
+    mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+    // Re-render annotations after Mermaid changes content height
+    mermaid.run().then(function() {
+      if (window._pitchbinRerender) window._pitchbinRerender();
+    });
+  };
   document.body.appendChild(s);
 })();
 </script>
