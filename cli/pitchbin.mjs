@@ -147,14 +147,14 @@ async function submit(url, stamp, markdown, title, slug, author, expires, isPriv
   return body;
 }
 
-async function updatePitch(url, id, secret, markdown, title, author, expires, revise) {
+async function updatePitch(url, id, secret, stamp, markdown, title, author, expires, revise) {
   const resp = await fetch(`${url}/api/pitch/${id}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
       "X-Pitch-Secret": secret,
     },
-    body: JSON.stringify({ markdown, title, author, expires, revise: !!revise }),
+    body: JSON.stringify({ stamp, markdown, title, author, expires, revise: !!revise }),
   });
 
   const body = await resp.json();
@@ -185,10 +185,21 @@ async function main() {
 
   const markdown = readMarkdown(opts.file);
 
+  // Auto-detect difficulty from server
+  let bits = opts.bits;
+  try {
+    const info = await fetchInfo(opts.url);
+    bits = info.pow.bits;
+  } catch {
+    process.stderr.write(`warning: could not reach server, using default ${bits} bits\n`);
+  }
+
+  const stamp = computeStamp(bits);
+
   // Handle update / revise
   if (opts.update || opts.revise) {
     const id = opts.update || opts.revise;
-    const result = await updatePitch(opts.url, id, opts.secret, markdown, opts.title, opts.author, opts.expires, opts.revise);
+    const result = await updatePitch(opts.url, id, opts.secret, stamp, markdown, opts.title, opts.author, opts.expires, opts.revise);
     console.log(result.url);
     return;
   }
@@ -209,16 +220,6 @@ async function main() {
     }
   }
 
-  // Auto-detect difficulty from server
-  let bits = opts.bits;
-  try {
-    const info = await fetchInfo(opts.url);
-    bits = info.pow.bits;
-  } catch {
-    process.stderr.write(`warning: could not reach server, using default ${bits} bits\n`);
-  }
-
-  const stamp = computeStamp(bits);
   const result = await submit(opts.url, stamp, markdown, opts.title, opts.slug, opts.author, opts.expires, opts.private);
 
   // Output URL to stdout, secret to stderr

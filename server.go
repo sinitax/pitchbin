@@ -304,6 +304,22 @@ func (s *Server) handleUpdatePitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verify proof of work
+	if err := VerifyStamp(req.Stamp, s.powBits); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid proof of work: " + err.Error()})
+		return
+	}
+	stampHash := StampHash(req.Stamp)
+	stampOk, err := s.store.UseStamp(stampHash)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if !stampOk {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "stamp already used"})
+		return
+	}
+
 	if len(req.Markdown) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "markdown is required"})
 		return
@@ -404,7 +420,6 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 	var revNum int
 	var title, author, markdown, html string
 	var created int64
-	var readonly bool
 
 	if revStr := r.URL.Query().Get("rev"); revStr != "" {
 		revNum, err = strconv.Atoi(revStr)
@@ -422,7 +437,6 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		title, author, markdown, html, created = rev.Title, rev.Author, rev.Markdown, rev.HTML, rev.Created
-		readonly = true
 	} else {
 		s.store.IncrementViews(id)
 		title, author, markdown, html, created = pitch.Title, pitch.Author, pitch.Markdown, pitch.HTML, pitch.Created
@@ -453,7 +467,7 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		RawURL:          s.baseURL + "/" + pitch.ID + "/raw",
 		BaseURL:         s.baseURL,
 		PowBits:         s.annotationPowBits,
-		Readonly:        readonly,
+		Readonly:        false,
 		RevisionCount:   revCount,
 		CurrentRevision: revNum,
 	}

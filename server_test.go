@@ -21,9 +21,12 @@ func newTestServer(t *testing.T) (*Server, *Store) {
 	return srv, store
 }
 
+var stampCounter uint64
+
 func solveStamp(bits int) string {
+	stampCounter++
 	ts := time.Now().Unix()
-	prefix := fmt.Sprintf("pitchbin:1:%d:testtest01234567:", ts)
+	prefix := fmt.Sprintf("pitchbin:1:%d:test%016x:", ts, stampCounter)
 	for nonce := 0; ; nonce++ {
 		s := fmt.Sprintf("%s%d", prefix, nonce)
 		h := sha256.Sum256([]byte(s))
@@ -631,8 +634,9 @@ func TestUpdatePitch(t *testing.T) {
 		t.Fatal("no secret returned")
 	}
 
-	// Update with correct secret
+	// Update with correct secret + PoW
 	updateBody, _ := json.Marshal(pitchRequest{
+		Stamp:    solveStamp(8),
 		Title:    "Updated",
 		Markdown: "# Updated content",
 	})
