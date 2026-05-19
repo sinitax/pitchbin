@@ -393,7 +393,7 @@ footer a:hover { color: #666; }
 
     <footer>
       <span><a href="{{.BaseURL}}">pitchbin</a></span>
-      {{if not .Readonly}}<span><a href="/{{.ID}}/raw{{if gt .CurrentRevision 0}}?rev={{.CurrentRevision}}{{end}}" download="{{.ID}}.md">original</a></span>
+      {{if .ID}}<span><a href="/{{.ID}}/raw{{if gt .CurrentRevision 0}}?rev={{.CurrentRevision}}{{end}}" download="{{.ID}}.md">original</a></span>
       <span><a href="/{{.ID}}/annotated{{if gt .CurrentRevision 0}}?rev={{.CurrentRevision}}{{end}}" download="{{.ID}}-annotated.md">annotated</a></span>{{end}}
     </footer>
   </div>

@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"encoding/json"
 	"html/template"
 	"log"
 	"net/http"
@@ -120,7 +121,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		HTML:            template.HTML(s.homeHTML),
 		Created:         time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC),
 		Views:           views,
-		ID:              "",
+		ID:              homeID,
 		BaseURL:         s.baseURL,
 		Readonly:        true,
 		AnnotationsJSON: template.JS(homeAnnotationsJSON),
@@ -130,4 +131,22 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	if err := s.tmpl.Execute(w, page); err != nil {
 		log.Printf("template error: %v", err)
 	}
+}
+
+func (s *Server) handleHomeRaw(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="pitchbin.md"`)
+	w.Write([]byte(homeMarkdown))
+}
+
+func (s *Server) handleHomeAnnotated(w http.ResponseWriter, r *http.Request) {
+	var annotations []Annotation
+	if err := json.Unmarshal([]byte(homeAnnotationsJSON), &annotations); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	result := toCriticMarkup(homeMarkdown, annotations)
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="pitchbin-annotated.md"`)
+	w.Write([]byte(result))
 }

@@ -130,6 +130,8 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annota
 	s.mux.HandleFunc("POST /api/{id}/annotations", s.handlePostAnnotation)
 	s.mux.HandleFunc("PUT /api/{id}/annotations/{aid}", s.handleUpdateAnnotation)
 	s.mux.HandleFunc("DELETE /api/{id}/annotations/{aid}", s.handleDeleteAnnotation)
+	s.mux.HandleFunc("GET /_home/raw", s.handleHomeRaw)
+	s.mux.HandleFunc("GET /_home/annotated", s.handleHomeAnnotated)
 	s.mux.HandleFunc("GET /q3-migration-plan", handleExampleRedirect)
 	s.mux.HandleFunc("GET /auth-module-review", handleExampleRedirect)
 	s.mux.HandleFunc("GET /{id}/raw", s.handleRaw)
