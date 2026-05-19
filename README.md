@@ -50,7 +50,7 @@ npx pitchbin [options] <file|->
 
   --title TEXT     Page title (URL slug)
   --author TEXT    Author name
-  --expires SPEC   7d, 30d, or 90d (default: permanent)
+  --expires SPEC   7d, 30d, 90d, or permanent (default: 7d)
   --private        Random suffix for unguessable URL
   -                Read from stdin
 ```

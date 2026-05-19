@@ -2,6 +2,8 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
 	"embed"
 	"encoding/hex"
@@ -48,6 +50,7 @@ type pitchRequest struct {
 type pitchResponse struct {
 	ID        string `json:"id"`
 	URL       string `json:"url"`
+	Secret    string `json:"secret,omitempty"`
 	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
@@ -108,6 +111,8 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annota
 	s.mux.HandleFunc("GET /favicon.svg", handleFavicon)
 	s.mux.HandleFunc("GET /robots.txt", handleRobots)
 	s.mux.HandleFunc("POST /api/pitch", s.handleSubmit)
+	s.mux.HandleFunc("PUT /api/pitch/{id}", s.handleUpdatePitch)
+	s.mux.HandleFunc("DELETE /api/pitch/{id}", s.handleDeletePitch)
 	s.mux.HandleFunc("GET /api/info", s.handleInfo)
 	s.mux.HandleFunc("GET /api/{id}/annotations", s.handleGetAnnotations)
 	s.mux.HandleFunc("POST /api/{id}/annotations", s.handlePostAnnotation)
@@ -198,14 +203,24 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	expires := parseExpiry(req.Expires, now)
 
+	// Generate edit secret
+	secretBytes := make([]byte, 16)
+	if _, err := rand.Read(secretBytes); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	secret := hex.EncodeToString(secretBytes)
+	secretHash := hashSecret(secret)
+
 	pitch := &Pitch{
-		ID:       id,
-		Title:    req.Title,
-		Author:   req.Author,
-		Markdown: req.Markdown,
-		HTML:     html,
-		Created:  now.Unix(),
-		Expires:  expires,
+		ID:         id,
+		Title:      req.Title,
+		Author:     req.Author,
+		Markdown:   req.Markdown,
+		HTML:       html,
+		Created:    now.Unix(),
+		Expires:    expires,
+		SecretHash: secretHash,
 	}
 
 	if err := s.store.InsertPitch(pitch); err != nil {
@@ -215,14 +230,113 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := pitchResponse{
-		ID:  id,
-		URL: s.baseURL + "/" + id,
+		ID:     id,
+		URL:    s.baseURL + "/" + id,
+		Secret: secret,
 	}
 	if expires > 0 {
 		resp.ExpiresAt = time.Unix(expires, 0).UTC().Format(time.RFC3339)
 	}
 
 	writeJSON(w, http.StatusCreated, resp)
+}
+
+func hashSecret(secret string) string {
+	h := sha256.Sum256([]byte(secret))
+	return hex.EncodeToString(h[:])
+}
+
+func (s *Server) verifySecret(w http.ResponseWriter, r *http.Request) (*Pitch, bool) {
+	id := r.PathValue("id")
+	pitch, err := s.store.GetPitch(id)
+	if err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return nil, false
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return nil, false
+	}
+	if pitch.SecretHash == "" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "pitch has no edit secret"})
+		return nil, false
+	}
+
+	secret := r.Header.Get("X-Pitch-Secret")
+	if secret == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing X-Pitch-Secret header"})
+		return nil, false
+	}
+	if subtle.ConstantTimeCompare([]byte(hashSecret(secret)), []byte(pitch.SecretHash)) != 1 {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "invalid secret"})
+		return nil, false
+	}
+
+	return pitch, true
+}
+
+func (s *Server) handleUpdatePitch(w http.ResponseWriter, r *http.Request) {
+	pitch, ok := s.verifySecret(w, r)
+	if !ok {
+		return
+	}
+
+	var req pitchRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, int64(s.maxSize+4096))).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	if len(req.Markdown) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "markdown is required"})
+		return
+	}
+	if len(req.Markdown) > s.maxSize {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "markdown too large"})
+		return
+	}
+
+	html, err := s.renderer.Render([]byte(req.Markdown))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to render markdown"})
+		return
+	}
+
+	if req.Title != "" {
+		pitch.Title = req.Title
+	}
+	if req.Author != "" {
+		pitch.Author = req.Author
+	}
+	pitch.Markdown = req.Markdown
+	pitch.HTML = html
+	if req.Expires != "" {
+		pitch.Expires = parseExpiry(req.Expires, time.Now())
+	}
+
+	if err := s.store.UpdatePitch(pitch); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update pitch"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, pitchResponse{
+		ID:  pitch.ID,
+		URL: s.baseURL + "/" + pitch.ID,
+	})
+}
+
+func (s *Server) handleDeletePitch(w http.ResponseWriter, r *http.Request) {
+	pitch, ok := s.verifySecret(w, r)
+	if !ok {
+		return
+	}
+
+	if err := s.store.DeletePitch(pitch.ID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete pitch"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
@@ -514,14 +628,14 @@ func handleRobots(w http.ResponseWriter, r *http.Request) {
 
 func parseExpiry(s string, now time.Time) int64 {
 	switch s {
-	case "7d":
-		return now.Add(7 * 24 * time.Hour).Unix()
+	case "permanent":
+		return 0
 	case "30d":
 		return now.Add(30 * 24 * time.Hour).Unix()
 	case "90d":
 		return now.Add(90 * 24 * time.Hour).Unix()
-	default: // no expiry by default
-		return 0
+	default: // 7d default
+		return now.Add(7 * 24 * time.Hour).Unix()
 	}
 }
 

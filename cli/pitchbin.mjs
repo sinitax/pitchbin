@@ -3,7 +3,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-const USAGE = `Usage: pitchbin [options] <file|->`
+const USAGE = `Usage: pitchbin [options] <file|->
+       pitchbin --update ID --secret SECRET <file|->
+       pitchbin --delete ID --secret SECRET`
 
 function die(msg) {
   process.stderr.write(`error: ${msg}\n`);
@@ -19,6 +21,9 @@ function parseArgs() {
     expires: "",
     bits: 20,
     private: false,
+    update: "",
+    delete: "",
+    secret: "",
     file: null,
   };
 
@@ -31,9 +36,12 @@ Options:
   --url URL        Pitchbin server URL (or PITCHBIN_URL env)
   --title TEXT     Pitch title (default: parsed from first # heading)
   --author TEXT    Author name
-  --expires SPEC   Expiry: 7d, 30d, 90d (default: permanent)
+  --expires SPEC   Expiry: 7d, 30d, 90d, permanent (default: 7d)
   --private        Add random suffix to URL (unguessable)
   --bits N         PoW difficulty override (default: auto-detect from server)
+  --update ID      Update an existing pitch by ID
+  --delete ID      Delete an existing pitch by ID
+  --secret SECRET  Edit secret (returned on creation)
   -                Read markdown from stdin`);
         process.exit(0);
       case "--url": opts.url = args[++i]; break;
@@ -42,13 +50,22 @@ Options:
       case "--expires": opts.expires = args[++i]; break;
       case "--bits": opts.bits = parseInt(args[++i], 10); break;
       case "-p": case "--private": opts.private = true; break;
+      case "--update": opts.update = args[++i]; break;
+      case "--delete": opts.delete = args[++i]; break;
+      case "--secret": opts.secret = args[++i]; break;
       default:
         if (args[i].startsWith("-") && args[i] !== "-") die(`unknown flag: ${args[i]}`);
         opts.file = args[i];
     }
   }
 
+  if (opts.delete) {
+    if (!opts.secret) die("--secret is required for --delete");
+    return opts;
+  }
+
   if (!opts.file) die("missing file argument. Use - for stdin.");
+  if (opts.update && !opts.secret) die("--secret is required for --update");
   return opts;
 }
 
@@ -120,9 +137,50 @@ async function submit(url, stamp, markdown, title, author, expires, isPrivate) {
   return body;
 }
 
+async function updatePitch(url, id, secret, markdown, title, author, expires) {
+  const resp = await fetch(`${url}/api/pitch/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Pitch-Secret": secret,
+    },
+    body: JSON.stringify({ markdown, title, author, expires }),
+  });
+
+  const body = await resp.json();
+  if (!resp.ok) die(`update failed: ${body.error || resp.status}`);
+  return body;
+}
+
+async function deletePitch(url, id, secret) {
+  const resp = await fetch(`${url}/api/pitch/${id}`, {
+    method: "DELETE",
+    headers: { "X-Pitch-Secret": secret },
+  });
+
+  const body = await resp.json();
+  if (!resp.ok) die(`delete failed: ${body.error || resp.status}`);
+  return body;
+}
+
 async function main() {
   const opts = parseArgs();
+
+  // Handle delete
+  if (opts.delete) {
+    await deletePitch(opts.url, opts.delete, opts.secret);
+    process.stderr.write("deleted\n");
+    return;
+  }
+
   const markdown = readMarkdown(opts.file);
+
+  // Handle update
+  if (opts.update) {
+    const result = await updatePitch(opts.url, opts.update, opts.secret, markdown, opts.title, opts.author, opts.expires);
+    console.log(result.url);
+    return;
+  }
 
   // Extract title: --title > frontmatter title > first h1 > "Untitled" (private)
   if (!opts.title) {
@@ -152,8 +210,9 @@ async function main() {
   const stamp = computeStamp(bits);
   const result = await submit(opts.url, stamp, markdown, opts.title, opts.author, opts.expires, opts.private);
 
-  // Output just the URL to stdout (for piping)
+  // Output URL to stdout, secret to stderr
   console.log(result.url);
+  process.stderr.write(`secret: ${result.secret}\n`);
 
   if (result.expires_at) {
     process.stderr.write(`expires: ${result.expires_at}\n`);

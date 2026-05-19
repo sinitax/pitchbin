@@ -85,8 +85,8 @@ func TestSubmitAndView(t *testing.T) {
 	if resp.URL != "http://test.local/test-pitch" {
 		t.Errorf("url = %q", resp.URL)
 	}
-	if resp.ExpiresAt != "" {
-		t.Error("expires_at should be empty by default")
+	if resp.ExpiresAt == "" {
+		t.Error("expires_at should be set by default (7d)")
 	}
 
 	// View the pitch
@@ -315,8 +315,9 @@ func TestParseExpiry(t *testing.T) {
 		{"7d", now.Add(7 * 24 * time.Hour).Unix()},
 		{"30d", now.Add(30 * 24 * time.Hour).Unix()},
 		{"90d", now.Add(90 * 24 * time.Hour).Unix()},
-		{"", 0},        // default: permanent
-		{"garbage", 0}, // unknown: permanent
+		{"", now.Add(7 * 24 * time.Hour).Unix()},            // default: 7d
+		{"garbage", now.Add(7 * 24 * time.Hour).Unix()},     // unknown: 7d
+		{"permanent", 0},
 	}
 
 	for _, tt := range tests {
@@ -603,6 +604,118 @@ func TestXSSAnnotations(t *testing.T) {
 	}
 	if a.Comment != `<img src=x onerror=alert("comment")>` {
 		t.Errorf("comment mangled: %q", a.Comment)
+	}
+}
+
+func TestUpdatePitch(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	// Create a pitch
+	stamp := solveStamp(8)
+	body, _ := json.Marshal(pitchRequest{
+		Stamp:    stamp,
+		Title:    "Original",
+		Markdown: "# Original",
+	})
+	req := httptest.NewRequest("POST", "/api/pitch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+
+	var created pitchResponse
+	json.NewDecoder(w.Body).Decode(&created)
+	if created.Secret == "" {
+		t.Fatal("no secret returned")
+	}
+
+	// Update with correct secret
+	updateBody, _ := json.Marshal(pitchRequest{
+		Title:    "Updated",
+		Markdown: "# Updated content",
+	})
+	req = httptest.NewRequest("PUT", "/api/pitch/"+created.ID, bytes.NewReader(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Pitch-Secret", created.Secret)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("update: %d %s", w.Code, w.Body.String())
+	}
+
+	// Verify updated content
+	pitch, _ := srv.store.GetPitch(created.ID)
+	if pitch.Title != "Updated" {
+		t.Errorf("title = %q, want Updated", pitch.Title)
+	}
+	if pitch.Markdown != "# Updated content" {
+		t.Errorf("markdown = %q", pitch.Markdown)
+	}
+
+	// Update with wrong secret
+	req = httptest.NewRequest("PUT", "/api/pitch/"+created.ID, bytes.NewReader(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Pitch-Secret", "wrong")
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != 403 {
+		t.Errorf("wrong secret: %d, want 403", w.Code)
+	}
+
+	// Update without secret
+	req = httptest.NewRequest("PUT", "/api/pitch/"+created.ID, bytes.NewReader(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != 401 {
+		t.Errorf("no secret: %d, want 401", w.Code)
+	}
+}
+
+func TestDeletePitch(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	// Create a pitch
+	stamp := solveStamp(8)
+	body, _ := json.Marshal(pitchRequest{
+		Stamp:    stamp,
+		Title:    "To Delete",
+		Markdown: "# Delete me",
+	})
+	req := httptest.NewRequest("POST", "/api/pitch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	var created pitchResponse
+	json.NewDecoder(w.Body).Decode(&created)
+
+	// Delete with wrong secret
+	req = httptest.NewRequest("DELETE", "/api/pitch/"+created.ID, nil)
+	req.Header.Set("X-Pitch-Secret", "wrong")
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != 403 {
+		t.Errorf("wrong secret: %d, want 403", w.Code)
+	}
+
+	// Delete with correct secret
+	req = httptest.NewRequest("DELETE", "/api/pitch/"+created.ID, nil)
+	req.Header.Set("X-Pitch-Secret", created.Secret)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("delete: %d %s", w.Code, w.Body.String())
+	}
+
+	// Verify deleted
+	req = httptest.NewRequest("GET", "/"+created.ID, nil)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != 404 {
+		t.Errorf("after delete: %d, want 404", w.Code)
 	}
 }
 

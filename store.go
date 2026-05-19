@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -12,14 +13,15 @@ type Store struct {
 }
 
 type Pitch struct {
-	ID       string
-	Title    string
-	Author   string
-	Markdown string
-	HTML     string
-	Views    int64
-	Created  int64
-	Expires  int64
+	ID         string
+	Title      string
+	Author     string
+	Markdown   string
+	HTML       string
+	Views      int64
+	Created    int64
+	Expires    int64
+	SecretHash string
 }
 
 type Annotation struct {
@@ -81,7 +83,21 @@ func migrate(db *sql.DB) error {
 			created INTEGER NOT NULL
 		);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Add secret_hash column if missing (migration for existing DBs)
+	_, err = db.Exec(`ALTER TABLE pitches ADD COLUMN secret_hash TEXT NOT NULL DEFAULT ''`)
+	if err != nil && !isAlreadyExists(err) {
+		return err
+	}
+
+	return nil
+}
+
+func isAlreadyExists(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "duplicate column")
 }
 
 func (s *Store) Close() error {
@@ -90,9 +106,9 @@ func (s *Store) Close() error {
 
 func (s *Store) InsertPitch(p *Pitch) error {
 	_, err := s.db.Exec(
-		`INSERT INTO pitches (id, title, author, markdown, html, views, created, expires)
-		 VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
-		p.ID, p.Title, p.Author, p.Markdown, p.HTML, p.Created, p.Expires,
+		`INSERT INTO pitches (id, title, author, markdown, html, views, created, expires, secret_hash)
+		 VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+		p.ID, p.Title, p.Author, p.Markdown, p.HTML, p.Created, p.Expires, p.SecretHash,
 	)
 	return err
 }
@@ -100,12 +116,25 @@ func (s *Store) InsertPitch(p *Pitch) error {
 func (s *Store) GetPitch(id string) (*Pitch, error) {
 	p := &Pitch{}
 	err := s.db.QueryRow(
-		`SELECT id, title, author, markdown, html, views, created, expires FROM pitches WHERE id = ?`, id,
-	).Scan(&p.ID, &p.Title, &p.Author, &p.Markdown, &p.HTML, &p.Views, &p.Created, &p.Expires)
+		`SELECT id, title, author, markdown, html, views, created, expires, secret_hash FROM pitches WHERE id = ?`, id,
+	).Scan(&p.ID, &p.Title, &p.Author, &p.Markdown, &p.HTML, &p.Views, &p.Created, &p.Expires, &p.SecretHash)
 	if err != nil {
 		return nil, err
 	}
 	return p, nil
+}
+
+func (s *Store) UpdatePitch(p *Pitch) error {
+	_, err := s.db.Exec(
+		`UPDATE pitches SET title = ?, author = ?, markdown = ?, html = ?, expires = ? WHERE id = ?`,
+		p.Title, p.Author, p.Markdown, p.HTML, p.Expires, p.ID,
+	)
+	return err
+}
+
+func (s *Store) DeletePitch(id string) error {
+	_, err := s.db.Exec(`DELETE FROM pitches WHERE id = ?`, id)
+	return err
 }
 
 func (s *Store) IncrementViews(id string) error {
