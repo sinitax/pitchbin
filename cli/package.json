@@ -1,6 +1,6 @@
 {
   "name": "pitchbin",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Share rendered markdown pages via pitchbin.xyz. One command, one URL.",
   "bin": {
     "pitchbin": "pitchbin.mjs"
