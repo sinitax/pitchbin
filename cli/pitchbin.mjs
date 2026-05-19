@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 
 const USAGE = `Usage: pitchbin [options] <file|->
        pitchbin --update ID --secret SECRET <file|->
+       pitchbin --revise ID --secret SECRET <file|->
        pitchbin --delete ID --secret SECRET`
 
 function die(msg) {
@@ -22,6 +23,7 @@ function parseArgs() {
     bits: 20,
     private: false,
     update: "",
+    revise: "",
     delete: "",
     secret: "",
     file: null,
@@ -39,7 +41,8 @@ Options:
   --expires SPEC   Expiry: 7d, 30d, 90d, permanent (default: 7d)
   --private        Add random suffix to URL (unguessable)
   --bits N         PoW difficulty override (default: auto-detect from server)
-  --update ID      Update an existing pitch by ID
+  --update ID      Update an existing pitch by ID (overwrites)
+  --revise ID      Update with revision history
   --delete ID      Delete an existing pitch by ID
   --secret SECRET  Edit secret (returned on creation)
   -                Read markdown from stdin`);
@@ -51,6 +54,7 @@ Options:
       case "--bits": opts.bits = parseInt(args[++i], 10); break;
       case "-p": case "--private": opts.private = true; break;
       case "--update": opts.update = args[++i]; break;
+      case "--revise": opts.revise = args[++i]; break;
       case "--delete": opts.delete = args[++i]; break;
       case "--secret": opts.secret = args[++i]; break;
       default:
@@ -66,6 +70,7 @@ Options:
 
   if (!opts.file) die("missing file argument. Use - for stdin.");
   if (opts.update && !opts.secret) die("--secret is required for --update");
+  if (opts.revise && !opts.secret) die("--secret is required for --revise");
   return opts;
 }
 
@@ -137,14 +142,14 @@ async function submit(url, stamp, markdown, title, author, expires, isPrivate) {
   return body;
 }
 
-async function updatePitch(url, id, secret, markdown, title, author, expires) {
+async function updatePitch(url, id, secret, markdown, title, author, expires, revise) {
   const resp = await fetch(`${url}/api/pitch/${id}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
       "X-Pitch-Secret": secret,
     },
-    body: JSON.stringify({ markdown, title, author, expires }),
+    body: JSON.stringify({ markdown, title, author, expires, revise: !!revise }),
   });
 
   const body = await resp.json();
@@ -175,9 +180,10 @@ async function main() {
 
   const markdown = readMarkdown(opts.file);
 
-  // Handle update
-  if (opts.update) {
-    const result = await updatePitch(opts.url, opts.update, opts.secret, markdown, opts.title, opts.author, opts.expires);
+  // Handle update / revise
+  if (opts.update || opts.revise) {
+    const id = opts.update || opts.revise;
+    const result = await updatePitch(opts.url, id, opts.secret, markdown, opts.title, opts.author, opts.expires, opts.revise);
     console.log(result.url);
     return;
   }

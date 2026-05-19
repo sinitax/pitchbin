@@ -45,6 +45,7 @@ type pitchRequest struct {
 	Markdown string `json:"markdown"`
 	Expires  string `json:"expires"`
 	Private  bool   `json:"private"`
+	Revise   bool   `json:"revise"`
 }
 
 type pitchResponse struct {
@@ -68,6 +69,16 @@ type pitchPage struct {
 	Readonly        bool
 	AnnotationsJSON template.JS
 	PowBits         int
+	RevisionCount   int
+	CurrentRevision int // 0 = latest
+}
+
+func (p pitchPage) RevisionList() []int {
+	revs := make([]int, p.RevisionCount)
+	for i := range revs {
+		revs[i] = p.RevisionCount - i
+	}
+	return revs
 }
 
 func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annotationPowBits, maxSize, rateLimit int, trustedProxy string, devMode bool) *Server {
@@ -302,6 +313,28 @@ func (s *Server) handleUpdatePitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Save current state as revision before updating
+	if req.Revise {
+		revCount, err := s.store.GetRevisionCount(pitch.ID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		rev := &Revision{
+			PitchID:  pitch.ID,
+			Revision: revCount + 1,
+			Title:    pitch.Title,
+			Author:   pitch.Author,
+			Markdown: pitch.Markdown,
+			HTML:     pitch.HTML,
+			Created:  pitch.Created,
+		}
+		if err := s.store.InsertRevision(rev); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save revision"})
+			return
+		}
+	}
+
 	if req.Title != "" {
 		pitch.Title = req.Title
 	}
@@ -310,6 +343,7 @@ func (s *Server) handleUpdatePitch(w http.ResponseWriter, r *http.Request) {
 	}
 	pitch.Markdown = req.Markdown
 	pitch.HTML = html
+	pitch.Created = time.Now().Unix()
 	if req.Expires != "" {
 		pitch.Expires = parseExpiry(req.Expires, time.Now())
 	}
@@ -319,10 +353,11 @@ func (s *Server) handleUpdatePitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, pitchResponse{
+	resp := pitchResponse{
 		ID:  pitch.ID,
 		URL: s.baseURL + "/" + pitch.ID,
-	})
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleDeletePitch(w http.ResponseWriter, r *http.Request) {
@@ -357,33 +392,64 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.store.IncrementViews(id)
+	revCount, _ := s.store.GetRevisionCount(pitch.ID)
 
-	created := time.Unix(pitch.Created, 0).UTC()
+	// Check for revision query parameter
+	var revNum int
+	var title, author, markdown, html string
+	var created int64
+	var readonly bool
+
+	if revStr := r.URL.Query().Get("rev"); revStr != "" {
+		revNum, err = strconv.Atoi(revStr)
+		if err != nil || revNum < 1 {
+			http.NotFound(w, r)
+			return
+		}
+		rev, err := s.store.GetRevision(id, revNum)
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		title, author, markdown, html, created = rev.Title, rev.Author, rev.Markdown, rev.HTML, rev.Created
+		readonly = true
+	} else {
+		s.store.IncrementViews(id)
+		title, author, markdown, html, created = pitch.Title, pitch.Author, pitch.Markdown, pitch.HTML, pitch.Created
+	}
+
+	renderedHTML := html
+	if s.devMode {
+		if h, renderErr := s.renderer.Render([]byte(markdown)); renderErr == nil {
+			renderedHTML = h
+		}
+	}
+
+	createdTime := time.Unix(created, 0).UTC()
 	var expires *time.Time
 	if pitch.Expires > 0 {
 		t := time.Unix(pitch.Expires, 0).UTC()
 		expires = &t
 	}
 
-	renderedHTML := pitch.HTML
-	if s.devMode {
-		if h, err := s.renderer.Render([]byte(pitch.Markdown)); err == nil {
-			renderedHTML = h
-		}
-	}
-
 	page := pitchPage{
-		Title:   pitch.Title,
-		Author:  pitch.Author,
-		HTML:    template.HTML(renderedHTML),
-		Created: created,
-		Expires: expires,
-		Views:   pitch.Views + 1,
-		ID:      pitch.ID,
-		RawURL:  s.baseURL + "/" + pitch.ID + "/raw",
-		BaseURL: s.baseURL,
-		PowBits: s.annotationPowBits,
+		Title:           title,
+		Author:          author,
+		HTML:            template.HTML(renderedHTML),
+		Created:         createdTime,
+		Expires:         expires,
+		Views:           pitch.Views + 1,
+		ID:              pitch.ID,
+		RawURL:          s.baseURL + "/" + pitch.ID + "/raw",
+		BaseURL:         s.baseURL,
+		PowBits:         s.annotationPowBits,
+		Readonly:        readonly,
+		RevisionCount:   revCount,
+		CurrentRevision: revNum,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

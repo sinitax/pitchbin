@@ -65,6 +65,42 @@ body {
 .meta a { color: inherit; text-decoration: none; }
 .meta a:hover { text-decoration: underline; }
 
+.revision-picker {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+.revision-picker .rev-icon {
+  cursor: pointer;
+  color: #999;
+  font-size: 1.1rem;
+  padding: 0.2rem;
+}
+.revision-picker .rev-icon:hover { color: #666; }
+.revision-picker .rev-dropdown {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 1.6rem;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  min-width: 120px;
+  z-index: 10;
+  font-size: 0.8rem;
+}
+.revision-picker:hover .rev-dropdown { display: block; }
+.revision-picker .rev-dropdown a {
+  display: block;
+  padding: 0.35rem 0.7rem;
+  color: #333;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.revision-picker .rev-dropdown a:hover { background: #f5f5f5; }
+.revision-picker .rev-dropdown a.active { font-weight: 600; color: #0066cc; }
+
 .annotation-card.editable { cursor: pointer; position: relative; }
 .ann-delete {
   position: absolute;
@@ -285,11 +321,22 @@ footer a:hover { color: #666; }
   <div class="container">
     <div class="meta">
       {{if .Title}}<h1>{{.Title}}</h1>{{end}}
+      {{if gt .RevisionCount 0}}
+      <div class="revision-picker">
+        <span class="rev-icon" title="Revisions">&#x1f551;</span>
+        <div class="rev-dropdown">
+          <a href="{{.BaseURL}}/{{.ID}}"{{if eq .CurrentRevision 0}} class="active"{{end}}>Latest</a>
+          {{range $i := .RevisionList}}<a href="{{$.BaseURL}}/{{$.ID}}?rev={{$i}}"{{if eq $.CurrentRevision $i}} class="active"{{end}}>Revision {{$i}}</a>
+          {{end}}
+        </div>
+      </div>
+      {{end}}
       <div class="meta-row">
         {{if .Author}}<span>by {{if .AuthorURL}}<a href="{{.AuthorURL}}">{{.Author}}</a>{{else}}{{.Author}}{{end}}</span>{{end}}
         <span>{{.Created.Format "Jan 2, 2006"}}</span>
         <span>{{.Views}} view{{if ne .Views 1}}s{{end}}</span>
         {{if .Expires}}<span>expires {{.Expires.Format "Jan 2, 2006"}}</span>{{end}}
+        {{if gt .CurrentRevision 0}}<span style="color:#c60">revision {{.CurrentRevision}}</span>{{end}}
       </div>
     </div>
 

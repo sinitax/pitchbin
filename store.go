@@ -93,6 +93,24 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS revisions (
+			id       INTEGER PRIMARY KEY AUTOINCREMENT,
+			pitch_id TEXT NOT NULL REFERENCES pitches(id) ON DELETE CASCADE,
+			revision INTEGER NOT NULL,
+			title    TEXT NOT NULL DEFAULT '',
+			author   TEXT NOT NULL DEFAULT '',
+			markdown TEXT NOT NULL,
+			html     TEXT NOT NULL,
+			created  INTEGER NOT NULL,
+			UNIQUE(pitch_id, revision)
+		);
+		CREATE INDEX IF NOT EXISTS idx_revisions_pitch ON revisions(pitch_id);
+	`)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -122,6 +140,43 @@ func (s *Store) GetPitch(id string) (*Pitch, error) {
 		return nil, err
 	}
 	return p, nil
+}
+
+type Revision struct {
+	PitchID  string
+	Revision int
+	Title    string
+	Author   string
+	Markdown string
+	HTML     string
+	Created  int64
+}
+
+func (s *Store) InsertRevision(r *Revision) error {
+	_, err := s.db.Exec(
+		`INSERT INTO revisions (pitch_id, revision, title, author, markdown, html, created)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		r.PitchID, r.Revision, r.Title, r.Author, r.Markdown, r.HTML, r.Created,
+	)
+	return err
+}
+
+func (s *Store) GetRevision(pitchID string, rev int) (*Revision, error) {
+	r := &Revision{}
+	err := s.db.QueryRow(
+		`SELECT pitch_id, revision, title, author, markdown, html, created
+		 FROM revisions WHERE pitch_id = ? AND revision = ?`, pitchID, rev,
+	).Scan(&r.PitchID, &r.Revision, &r.Title, &r.Author, &r.Markdown, &r.HTML, &r.Created)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func (s *Store) GetRevisionCount(pitchID string) (int, error) {
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM revisions WHERE pitch_id = ?`, pitchID).Scan(&count)
+	return count, err
 }
 
 func (s *Store) UpdatePitch(p *Pitch) error {
