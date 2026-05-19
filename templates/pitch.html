@@ -325,8 +325,8 @@ footer a:hover { color: #666; }
       <div class="revision-picker">
         <span class="rev-icon" title="Revisions">&#x1f551;</span>
         <div class="rev-dropdown">
-          <a href="{{.BaseURL}}/{{.ID}}"{{if eq .CurrentRevision 0}} class="active"{{end}}>Latest</a>
-          {{range $i := .RevisionList}}<a href="{{$.BaseURL}}/{{$.ID}}?rev={{$i}}"{{if eq $.CurrentRevision $i}} class="active"{{end}}>Revision {{$i}}</a>
+          <a href="/{{.ID}}"{{if eq .CurrentRevision 0}} class="active"{{end}}>Latest</a>
+          {{range $i := .RevisionList}}<a href="/{{$.ID}}?rev={{$i}}"{{if eq $.CurrentRevision $i}} class="active"{{end}}>Revision {{$i}}</a>
           {{end}}
         </div>
       </div>
@@ -344,8 +344,8 @@ footer a:hover { color: #666; }
 
     <footer>
       <span><a href="{{.BaseURL}}">pitchbin</a></span>
-      {{if not .Readonly}}<span><a href="{{.BaseURL}}/{{.ID}}/raw" download="{{.ID}}.md">original</a></span>
-      <span><a href="{{.BaseURL}}/{{.ID}}/annotated" download="{{.ID}}-annotated.md">annotated</a></span>{{end}}
+      {{if not .Readonly}}<span><a href="/{{.ID}}/raw" download="{{.ID}}.md">original</a></span>
+      <span><a href="/{{.ID}}/annotated" download="{{.ID}}-annotated.md">annotated</a></span>{{end}}
     </footer>
   </div>
 
