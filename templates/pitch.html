@@ -785,11 +785,8 @@ footer a:hover { color: #666; }
         card.addEventListener('click', function(e) {
           if (e.target.classList.contains('ann-delete')) return;
           history.replaceState(null, '', '#' + a.id);
-          const clickedAuthor = e.target.closest('.ann-author');
-          editAnnotation(card, a, clickedAuthor ? 'author' : 'comment');
         });
       } else if (!a._pending && !a._submitting) {
-        card.style.cursor = 'pointer';
         card.addEventListener('click', function() {
           history.replaceState(null, '', '#' + a.id);
         });
@@ -805,9 +802,6 @@ footer a:hover { color: #666; }
         m.addEventListener('click', function(e) {
           e.stopPropagation();
           history.replaceState(null, '', '#' + a.id);
-          if (a.editable && !READONLY) {
-            editAnnotation(card, a, 'comment');
-          }
         });
       });
 
