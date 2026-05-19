@@ -589,7 +589,9 @@ footer a:hover { color: #666; }
     // Try stored offsets first, fall back to quote search
     let segments = findRangeByOffset(textStart, textEnd);
     const matched = segments.map(s => s.node.textContent.substring(s.from, s.to)).join('');
-    if (matched !== quote && quote) {
+    // Normalize whitespace for comparison — Selection.toString() adds newlines
+    // between block elements but textContent does not
+    if (matched.replace(/\s+/g, ' ').trim() !== quote.replace(/\s+/g, ' ').trim() && quote) {
       segments = findRangeByQuote(quote);
     }
 
