@@ -355,6 +355,10 @@ func (s *Server) handleUpdatePitch(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save revision"})
 			return
 		}
+		// Move current annotations (revision=0) to the saved revision
+		if err := s.store.ReassignAnnotations(pitch.ID, 0, revCount+1); err != nil {
+			log.Printf("annotation reassign error: %v", err)
+		}
 	}
 
 	if req.Title != "" {
@@ -478,55 +482,73 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
+// getPitchMarkdown returns the markdown for a pitch, respecting ?rev= query param.
+func (s *Server) getPitchMarkdown(w http.ResponseWriter, r *http.Request) (markdown string, rev int, ok bool) {
 	id := r.PathValue("id")
 	pitch, err := s.store.GetPitch(id)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
-		return
+		return "", 0, false
 	}
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+		return "", 0, false
 	}
-
 	if pitch.Expires > 0 && pitch.Expires < time.Now().Unix() {
 		http.NotFound(w, r)
-		return
+		return "", 0, false
 	}
 
+	if revStr := r.URL.Query().Get("rev"); revStr != "" {
+		revNum, _ := strconv.Atoi(revStr)
+		if revNum < 1 {
+			http.NotFound(w, r)
+			return "", 0, false
+		}
+		revData, err := s.store.GetRevision(id, revNum)
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return "", 0, false
+		}
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return "", 0, false
+		}
+		return revData.Markdown, revNum, true
+	}
+
+	return pitch.Markdown, 0, true
+}
+
+func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
+	markdown, _, ok := s.getPitchMarkdown(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+pitch.ID+`.md"`)
-	w.Write([]byte(pitch.Markdown))
+	w.Header().Set("Content-Disposition", `attachment; filename="`+id+`.md"`)
+	w.Write([]byte(markdown))
 }
 
 func (s *Server) handleAnnotated(w http.ResponseWriter, r *http.Request) {
+	markdown, rev, ok := s.getPitchMarkdown(w, r)
+	if !ok {
+		return
+	}
 	id := r.PathValue("id")
-	pitch, err := s.store.GetPitch(id)
-	if err == sql.ErrNoRows {
-		http.NotFound(w, r)
-		return
-	}
+
+	annotations, err := s.store.GetAnnotations(id, rev)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	if pitch.Expires > 0 && pitch.Expires < time.Now().Unix() {
-		http.NotFound(w, r)
-		return
-	}
-
-	annotations, err := s.store.GetAnnotations(id)
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
-	result := toCriticMarkup(pitch.Markdown, annotations)
+	result := toCriticMarkup(markdown, annotations)
 
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+pitch.ID+`-annotated.md"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+id+`-annotated.md"`)
 	w.Write([]byte(result))
 }
 
@@ -616,7 +638,12 @@ func (s *Server) handleGetAnnotations(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	sess := getSession(w, r)
 
-	annotations, err := s.store.GetAnnotations(id)
+	rev := 0
+	if revStr := r.URL.Query().Get("rev"); revStr != "" {
+		rev, _ = strconv.Atoi(revStr)
+	}
+
+	annotations, err := s.store.GetAnnotations(id, rev)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
@@ -648,6 +675,7 @@ func (s *Server) handlePostAnnotation(w http.ResponseWriter, r *http.Request) {
 		Quote     string `json:"quote"`
 		TextStart int    `json:"text_start"`
 		TextEnd   int    `json:"text_end"`
+		Revision  int    `json:"revision"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
@@ -679,6 +707,7 @@ func (s *Server) handlePostAnnotation(w http.ResponseWriter, r *http.Request) {
 
 	a := &Annotation{
 		PitchID:   id,
+		Revision:  req.Revision,
 		Session:   sess,
 		Author:    req.Author,
 		Comment:   req.Comment,

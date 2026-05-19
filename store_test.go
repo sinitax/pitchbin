@@ -120,7 +120,7 @@ func TestStoreAnnotations(t *testing.T) {
 	a2 := &Annotation{PitchID: "p1", Author: "alice", Comment: "agreed", Quote: "other", TextStart: 5, TextEnd: 10, Created: time.Now().Unix()}
 	s.InsertAnnotation(a2)
 
-	annotations, err := s.GetAnnotations("p1")
+	annotations, err := s.GetAnnotations("p1", 0)
 	if err != nil {
 		t.Fatalf("GetAnnotations: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestStoreAnnotations(t *testing.T) {
 	}
 
 	// Empty pitch
-	empty, err := s.GetAnnotations("nonexistent")
+	empty, err := s.GetAnnotations("nonexistent", 0)
 	if err != nil {
 		t.Fatal(err)
 	}

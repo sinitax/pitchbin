@@ -27,6 +27,7 @@ type Pitch struct {
 type Annotation struct {
 	ID        int64  `json:"id"`
 	PitchID   string `json:"pitch_id"`
+	Revision  int    `json:"revision"`
 	Session   string `json:"-"`
 	Author    string `json:"author"`
 	Comment   string `json:"comment"`
@@ -89,6 +90,11 @@ func migrate(db *sql.DB) error {
 
 	// Add secret_hash column if missing (migration for existing DBs)
 	_, err = db.Exec(`ALTER TABLE pitches ADD COLUMN secret_hash TEXT NOT NULL DEFAULT ''`)
+	if err != nil && !isAlreadyExists(err) {
+		return err
+	}
+
+	_, err = db.Exec(`ALTER TABLE annotations ADD COLUMN revision INTEGER NOT NULL DEFAULT 0`)
 	if err != nil && !isAlreadyExists(err) {
 		return err
 	}
@@ -237,9 +243,9 @@ func (s *Store) PitchExists(id string) bool {
 
 func (s *Store) InsertAnnotation(a *Annotation) (int64, error) {
 	res, err := s.db.Exec(
-		`INSERT INTO annotations (pitch_id, session, author, comment, quote, text_start, text_end, created)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		a.PitchID, a.Session, a.Author, a.Comment, a.Quote, a.TextStart, a.TextEnd, a.Created,
+		`INSERT INTO annotations (pitch_id, revision, session, author, comment, quote, text_start, text_end, created)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		a.PitchID, a.Revision, a.Session, a.Author, a.Comment, a.Quote, a.TextStart, a.TextEnd, a.Created,
 	)
 	if err != nil {
 		return 0, err
@@ -247,10 +253,10 @@ func (s *Store) InsertAnnotation(a *Annotation) (int64, error) {
 	return res.LastInsertId()
 }
 
-func (s *Store) GetAnnotations(pitchID string) ([]Annotation, error) {
+func (s *Store) GetAnnotations(pitchID string, revision int) ([]Annotation, error) {
 	rows, err := s.db.Query(
-		`SELECT id, pitch_id, session, author, comment, quote, text_start, text_end, created
-		 FROM annotations WHERE pitch_id = ? ORDER BY text_start, created`, pitchID,
+		`SELECT id, pitch_id, revision, session, author, comment, quote, text_start, text_end, created
+		 FROM annotations WHERE pitch_id = ? AND revision = ? ORDER BY text_start, created`, pitchID, revision,
 	)
 	if err != nil {
 		return nil, err
@@ -260,7 +266,7 @@ func (s *Store) GetAnnotations(pitchID string) ([]Annotation, error) {
 	var out []Annotation
 	for rows.Next() {
 		var a Annotation
-		if err := rows.Scan(&a.ID, &a.PitchID, &a.Session, &a.Author, &a.Comment, &a.Quote, &a.TextStart, &a.TextEnd, &a.Created); err != nil {
+		if err := rows.Scan(&a.ID, &a.PitchID, &a.Revision, &a.Session, &a.Author, &a.Comment, &a.Quote, &a.TextStart, &a.TextEnd, &a.Created); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -278,6 +284,14 @@ func (s *Store) GetAnnotation(id int64) (*Annotation, error) {
 		return nil, err
 	}
 	return a, nil
+}
+
+func (s *Store) ReassignAnnotations(pitchID string, fromRevision, toRevision int) error {
+	_, err := s.db.Exec(
+		`UPDATE annotations SET revision = ? WHERE pitch_id = ? AND revision = ?`,
+		toRevision, pitchID, fromRevision,
+	)
+	return err
 }
 
 func (s *Store) UpdateAnnotation(id int64, author, comment string) error {

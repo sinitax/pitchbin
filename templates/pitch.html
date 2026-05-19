@@ -344,8 +344,8 @@ footer a:hover { color: #666; }
 
     <footer>
       <span><a href="{{.BaseURL}}">pitchbin</a></span>
-      {{if not .Readonly}}<span><a href="/{{.ID}}/raw" download="{{.ID}}.md">original</a></span>
-      <span><a href="/{{.ID}}/annotated" download="{{.ID}}-annotated.md">annotated</a></span>{{end}}
+      {{if not .Readonly}}<span><a href="/{{.ID}}/raw{{if gt .CurrentRevision 0}}?rev={{.CurrentRevision}}{{end}}" download="{{.ID}}.md">original</a></span>
+      <span><a href="/{{.ID}}/annotated{{if gt .CurrentRevision 0}}?rev={{.CurrentRevision}}{{end}}" download="{{.ID}}-annotated.md">annotated</a></span>{{end}}
     </footer>
   </div>
 
@@ -358,6 +358,7 @@ footer a:hover { color: #666; }
   const PITCH_ID = {{.ID}};
   const READONLY = {{.Readonly}};
   const POW_BITS = {{.PowBits}};
+  const REVISION = {{.CurrentRevision}};
   const contentEl = document.getElementById('content');
   const gutterEl = document.getElementById('gutter');
 
@@ -526,6 +527,7 @@ footer a:hover { color: #666; }
           quote: sel.quote,
           text_start: sel.textStart,
           text_end: sel.textEnd,
+          revision: REVISION,
         };
         return fetch('/api/' + PITCH_ID + '/annotations', {
           method: 'POST',
@@ -873,7 +875,7 @@ footer a:hover { color: #666; }
   if (annotations.length) renderAnnotations();
   scrollToHash();
   {{else}}
-  fetch('/api/' + PITCH_ID + '/annotations')
+  fetch('/api/' + PITCH_ID + '/annotations?rev=' + REVISION)
     .then(r => r.json())
     .then(function(data) {
       annotations = data || [];
