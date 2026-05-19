@@ -21,6 +21,7 @@ function parseArgs() {
     author: "",
     expires: "",
     bits: 20,
+    slug: "",
     private: false,
     update: "",
     revise: "",
@@ -39,6 +40,7 @@ Options:
   --title TEXT     Pitch title (default: parsed from first # heading)
   --author TEXT    Author name
   --expires SPEC   Expiry: 7d, 30d, 90d, permanent (default: 7d)
+  --slug TEXT      URL slug (default: derived from title)
   --private        Add random suffix to URL (unguessable)
   --bits N         PoW difficulty override (default: auto-detect from server)
   --update ID      Update an existing pitch by ID (overwrites)
@@ -52,6 +54,7 @@ Options:
       case "--author": opts.author = args[++i]; break;
       case "--expires": opts.expires = args[++i]; break;
       case "--bits": opts.bits = parseInt(args[++i], 10); break;
+      case "--slug": opts.slug = args[++i]; break;
       case "-p": case "--private": opts.private = true; break;
       case "--update": opts.update = args[++i]; break;
       case "--revise": opts.revise = args[++i]; break;
@@ -130,11 +133,13 @@ async function fetchInfo(url) {
   return resp.json();
 }
 
-async function submit(url, stamp, markdown, title, author, expires, isPrivate) {
+async function submit(url, stamp, markdown, title, slug, author, expires, isPrivate) {
+  const payload = { stamp, markdown, title, author, expires, private: isPrivate };
+  if (slug) payload.slug = slug;
   const resp = await fetch(`${url}/api/pitch`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ stamp, markdown, title, author, expires, private: isPrivate }),
+    body: JSON.stringify(payload),
   });
 
   const body = await resp.json();
@@ -214,7 +219,7 @@ async function main() {
   }
 
   const stamp = computeStamp(bits);
-  const result = await submit(opts.url, stamp, markdown, opts.title, opts.author, opts.expires, opts.private);
+  const result = await submit(opts.url, stamp, markdown, opts.title, opts.slug, opts.author, opts.expires, opts.private);
 
   // Output URL to stdout, secret to stderr
   console.log(result.url);

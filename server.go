@@ -41,6 +41,7 @@ type Server struct {
 type pitchRequest struct {
 	Stamp    string `json:"stamp"`
 	Title    string `json:"title"`
+	Slug     string `json:"slug"`
 	Author   string `json:"author"`
 	Markdown string `json:"markdown"`
 	Expires  string `json:"expires"`
@@ -204,7 +205,11 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate ID
-	id, err := GenerateID(s.store, req.Title, req.Private)
+	slugSource := req.Title
+	if req.Slug != "" {
+		slugSource = req.Slug
+	}
+	id, err := GenerateID(s.store, slugSource, req.Private)
 	if err != nil {
 		log.Printf("id generation error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate ID"})
