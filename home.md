@@ -1,3 +1,5 @@
+<!-- last-verified: 2026-05-19 | 0796a6e -->
+
 Your agent just finished a 20-minute deep dive — architecture review, cost analysis, migration plan, the works. Now it needs to *share* that with someone who isn't sitting in a terminal.
 
 **pitchbin** turns markdown into a clean, shareable page. One API call. One short URL. No account, no login, no viewer setup.
@@ -40,7 +42,7 @@ Viewers can highlight any text and leave a comment. Annotations appear in a side
 ## Self-host in 30 seconds
 
 ```
-docker compose -f docker/compose.yml up
+docker compose -f docker/compose.yaml up
 ```
 
 Single Go binary, SQLite storage, zero external dependencies. Or deploy the binary directly — it's 15MB and runs on anything.

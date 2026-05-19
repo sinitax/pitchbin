@@ -1,3 +1,5 @@
+<!-- last-verified: 2026-05-19 | 0796a6e -->
+
 # pitchbin
 
 Markdown → clean shareable page. One API call. No auth.
@@ -38,7 +40,7 @@ Viewers highlight any text and leave a comment. Annotations appear in a sidebar,
 ## Self-host
 
 ```
-docker compose -f docker/compose.yml up
+docker compose -f docker/compose.yaml up
 ```
 
 Single Go binary, SQLite, zero external dependencies. 15MB, runs on anything.

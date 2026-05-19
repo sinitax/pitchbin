@@ -5,6 +5,7 @@ description: >
   Creates a short shareable URL. Use when the user says "pitch this", "share this",
   "make a page", or invokes /pitch.
 ---
+<!-- last-verified: 2026-05-19 | 0796a6e -->
 
 # Pitch to Pitchbin
 
@@ -38,7 +39,7 @@ You are helping the user share content via pitchbin — a service that renders m
 
    The CLI computes proof-of-work locally and submits. It prints the URL to stdout.
 
-   If `PITCHBIN_URL` env var is set, it uses that. Otherwise defaults to `https://pitchbin.io`.
+   If `PITCHBIN_URL` env var is set, it uses that. Otherwise defaults to `https://pitchbin.xyz`.
 
 5. **Return the URL.** Show the user the pitchbin URL so they can share it.
 
