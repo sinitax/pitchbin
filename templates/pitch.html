@@ -293,6 +293,9 @@ mark.annotation-hl:hover { background: #ffe566; }
   margin-top: 0.25rem;
 }
 
+.gutter-close { display: none; }
+.gutter-backdrop { display: none; }
+
 footer {
   margin-top: 3rem;
   padding-top: 1rem;
@@ -309,7 +312,48 @@ footer a { color: #999; text-decoration: none; }
 footer a:hover { color: #666; }
 
 @media (max-width: 1100px) {
-  .annotations-gutter { display: none; }
+  .annotations-gutter {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 300px;
+    max-width: 85vw;
+    background: #fafafa;
+    box-shadow: -2px 0 12px rgba(0,0,0,0.15);
+    z-index: 100;
+    overflow-y: auto;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    padding: 0.75rem 1rem;
+  }
+  .annotations-gutter.open { transform: translateX(0); }
+  .gutter-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: 99;
+  }
+  .gutter-backdrop.open { display: block; }
+  .gutter-close {
+    display: block;
+    position: sticky;
+    top: 0;
+    text-align: right;
+    margin-bottom: 0.25rem;
+    z-index: 1;
+  }
+  .gutter-close button {
+    background: none;
+    border: none;
+    font-size: 1.4rem;
+    color: #666;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    line-height: 1;
+  }
+  .gutter-close button:hover { color: #333; }
 }
 
 @media (max-width: 600px) {
@@ -352,6 +396,7 @@ footer a:hover { color: #666; }
     </footer>
   </div>
 
+  <div class="gutter-backdrop" id="gutter-backdrop"></div>
   <div class="annotations-gutter" id="gutter"></div>
 </div>
 
@@ -364,6 +409,25 @@ footer a:hover { color: #666; }
   const REVISION = {{.CurrentRevision}};
   const contentEl = document.getElementById('content');
   const gutterEl = document.getElementById('gutter');
+  const backdropEl = document.getElementById('gutter-backdrop');
+
+  const isMobile = () => window.innerWidth <= 1100;
+
+  function openGutter(scrollToCard) {
+    if (!isMobile()) return;
+    gutterEl.classList.add('open');
+    backdropEl.classList.add('open');
+    if (scrollToCard) {
+      setTimeout(() => scrollToCard.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+    }
+  }
+
+  function closeGutter() {
+    gutterEl.classList.remove('open');
+    backdropEl.classList.remove('open');
+  }
+
+  backdropEl.addEventListener('click', closeGutter);
 
   let pendingSelection = null;
   let annotations = [];
@@ -501,6 +565,7 @@ footer a:hover { color: #666; }
       pendingSelection = null;
       annotations = annotations.filter(a => !a._pending);
       renderAnnotations();
+      closeGutter();
     }
 
     function submitPending(author, comment) {
@@ -719,6 +784,13 @@ footer a:hover { color: #666; }
     contentEl.normalize();
 
     gutterEl.innerHTML = '';
+    // Add close button for mobile panel
+    const closeDiv = document.createElement('div');
+    closeDiv.className = 'gutter-close';
+    closeDiv.innerHTML = '<button title="Close">\u00d7</button>';
+    closeDiv.querySelector('button').addEventListener('click', closeGutter);
+    gutterEl.appendChild(closeDiv);
+
     annotations.sort((a, b) => a.text_start - b.text_start);
 
     let lastCardBottom = 0;
@@ -787,6 +859,7 @@ footer a:hover { color: #666; }
 
         gutterEl.appendChild(card);
         lastCardBottom = topPos + card.offsetHeight;
+        openGutter(card);
         commentInput.focus();
         return;
       }
@@ -832,6 +905,7 @@ footer a:hover { color: #666; }
         m.addEventListener('click', function(e) {
           e.stopPropagation();
           history.replaceState(null, '', '#' + a.id);
+          openGutter(card);
         });
       });
 
@@ -883,6 +957,7 @@ footer a:hover { color: #666; }
     card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
     marks.forEach(m => m.style.background = '#ffe566');
     activeHighlight = { card, marks };
+    openGutter(card);
   }
 
   function scrollToHash() {
