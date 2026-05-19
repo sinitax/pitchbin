@@ -705,6 +705,12 @@ footer a:hover { color: #666; }
     setTimeout(() => document.addEventListener('mousedown', onClickOutside), 0);
   }
 
+  function getDocOffset(el) {
+    let top = 0;
+    while (el) { top += el.offsetTop; el = el.offsetParent; }
+    return top;
+  }
+
   function renderAnnotations() {
     contentEl.querySelectorAll('mark.annotation-hl').forEach(m => {
       const parent = m.parentNode;
@@ -725,9 +731,7 @@ footer a:hover { color: #666; }
 
       let topPos = 0;
       if (mark) {
-        const markRect = mark.getBoundingClientRect();
-        const gutterRect = gutterEl.getBoundingClientRect();
-        topPos = markRect.top - gutterRect.top + gutterEl.scrollTop;
+        topPos = getDocOffset(mark) - getDocOffset(gutterEl);
       }
 
       if (topPos < lastCardBottom + 8) topPos = lastCardBottom + 8;
