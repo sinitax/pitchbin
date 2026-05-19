@@ -481,7 +481,8 @@ func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+pitch.ID+`.md"`)
 	w.Write([]byte(pitch.Markdown))
 }
 
@@ -510,7 +511,8 @@ func (s *Server) handleAnnotated(w http.ResponseWriter, r *http.Request) {
 
 	result := toCriticMarkup(pitch.Markdown, annotations)
 
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+pitch.ID+`-annotated.md"`)
 	w.Write([]byte(result))
 }
 
