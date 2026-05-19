@@ -5,6 +5,8 @@ services:
       dockerfile: docker/Dockerfile
     volumes:
       - data:/data
+    ports:
+      - ${PITCHBIN_BIND:-8080}:8080
     command:
       - -addr
       - ":8080"
@@ -13,7 +15,7 @@ services:
       - -base-url
       - ${PITCHBIN_BASE_URL:-https://pitchbin.xyz}
       - -pow-bits
-      - ${PITCHBIN_POW_BITS:-20}
+      - ${PITCHBIN_POW_BITS:-18}
     restart: unless-stopped
 
 volumes:

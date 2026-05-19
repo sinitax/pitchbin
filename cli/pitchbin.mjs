@@ -20,7 +20,7 @@ function parseArgs() {
     title: "",
     author: "",
     expires: "",
-    bits: 20,
+    bits: 18,
     slug: "",
     private: false,
     update: "",
