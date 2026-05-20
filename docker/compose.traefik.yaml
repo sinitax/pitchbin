@@ -7,9 +7,9 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.pitchbin.rule=Host(`${PITCHBIN_DOMAIN:-pitchbin.xyz}`)
-      - traefik.http.routers.pitchbin.entrypoints=websecure
-      - traefik.http.routers.pitchbin.tls.certresolver=letsencrypt
       - traefik.http.services.pitchbin.loadbalancer.server.port=8080
+      #- traefik.http.routers.pitchbin.entrypoints=websecure
+      #- traefik.http.routers.pitchbin.tls.certresolver=letsencrypt
 
 networks:
   traefik-ingress:
