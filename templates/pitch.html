@@ -510,6 +510,29 @@ footer a:hover { color: #666; }
 
   if (!READONLY) {
     function getTextOffset(container, node, offset) {
+      // If node is an element (e.g. <th>), resolve to a text node
+      if (node.nodeType !== Node.TEXT_NODE) {
+        if (offset < node.childNodes.length) {
+          node = node.childNodes[offset];
+          offset = 0;
+        }
+        // Resolve to first descendant text node
+        if (node.nodeType !== Node.TEXT_NODE) {
+          const tw = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+          if (tw.nextNode()) { node = tw.currentNode; offset = 0; }
+        }
+        // Still not a text node (empty element) — find next text node in container
+        if (node.nodeType !== Node.TEXT_NODE) {
+          const tw = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+          let found = false;
+          while (tw.nextNode()) {
+            if (node.compareDocumentPosition(tw.currentNode) & Node.DOCUMENT_POSITION_FOLLOWING) {
+              node = tw.currentNode; offset = 0; found = true; break;
+            }
+          }
+          if (!found) return 0;
+        }
+      }
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
       let pos = 0;
       while (walker.nextNode()) {
@@ -807,7 +830,14 @@ footer a:hover { color: #666; }
 
       let topPos = 0;
       if (mark) {
-        topPos = mark.offsetTop - gutterEl.offsetTop;
+        // Walk offsetParent chain — needed because table cells (td/th) are
+        // offsetParents, so mark.offsetTop alone is relative to the cell
+        let el = mark;
+        while (el && el !== gutterEl.offsetParent) {
+          topPos += el.offsetTop;
+          el = el.offsetParent;
+        }
+        topPos -= gutterEl.offsetTop;
       }
 
       if (topPos < lastCardBottom + 8) topPos = lastCardBottom + 8;
