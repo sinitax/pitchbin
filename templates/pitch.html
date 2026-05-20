@@ -662,8 +662,13 @@ footer a:hover { color: #666; }
       segments = findRangeByQuote(quote);
     }
 
+    const noInline = new Set(['TABLE','THEAD','TBODY','TFOOT','TR','COLGROUP','UL','OL','DL','SELECT','OPTGROUP']);
     segments.forEach(function(seg) {
       const text = seg.node;
+      const parent = text.parentNode;
+      // Skip text nodes in elements that don't allow inline children
+      if (parent && noInline.has(parent.tagName)) return;
+
       const before = text.textContent.substring(0, seg.from);
       const mid = text.textContent.substring(seg.from, seg.to);
       const after = text.textContent.substring(seg.to);
@@ -672,8 +677,6 @@ footer a:hover { color: #666; }
       mark.className = 'annotation-hl';
       mark.dataset.annotationId = annotationId;
       mark.textContent = mid;
-
-      const parent = text.parentNode;
       if (after) parent.insertBefore(document.createTextNode(after), text.nextSibling);
       parent.insertBefore(mark, text.nextSibling);
       if (before) {
