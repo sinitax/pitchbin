@@ -3,7 +3,7 @@ services:
     ports: !reset
     networks:
       - default
-      - docker-ingress
+      - traefik-ingress
     labels:
       - traefik.enable=true
       - traefik.http.routers.pitchbin.rule=Host(`${PITCHBIN_DOMAIN:-pitchbin.xyz}`)
@@ -12,5 +12,5 @@ services:
       - traefik.http.services.pitchbin.loadbalancer.server.port=8080
 
 networks:
-  docker-ingress:
+  traefik-ingress:
     external: true
