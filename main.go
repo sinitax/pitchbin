@@ -16,7 +16,7 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	dbPath := flag.String("db", "pitchbin.db", "SQLite database path")
-	baseURL := flag.String("base-url", "", "public base URL (e.g. https://pitchbin.io)")
+	baseURL := flag.String("base-url", "", "public base URL (e.g. https://pitchbin.xyz)")
 	powBits := flag.Int("pow-bits", 18, "proof-of-work difficulty in leading zero bits")
 	annotationPowBits := flag.Int("annotation-pow-bits", 16, "proof-of-work difficulty for annotations")
 	maxSize := flag.Int("max-size", 512000, "max markdown size in bytes")
