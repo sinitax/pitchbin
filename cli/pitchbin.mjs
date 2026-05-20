@@ -2,6 +2,13 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PKG = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf-8"));
+const VERSION = PKG.version;
+const UA = `pitchbin/${VERSION}`;
 
 const USAGE = `Usage: pitchbin [options] <file|->
        pitchbin --update ID --secret SECRET <file|->
@@ -127,9 +134,17 @@ function computeStamp(bits) {
   }
 }
 
+function checkUpdateNotice(resp) {
+  const update = resp.headers.get("x-pitchbin-update");
+  if (update) process.stderr.write(`notice: ${update}\n`);
+}
+
 async function fetchInfo(url) {
-  const resp = await fetch(`${url}/api/info`);
+  const resp = await fetch(`${url}/api/info`, {
+    headers: { "User-Agent": UA },
+  });
   if (!resp.ok) die(`failed to fetch server info: ${resp.status}`);
+  checkUpdateNotice(resp);
   return resp.json();
 }
 
@@ -138,12 +153,13 @@ async function submit(url, stamp, markdown, title, slug, author, expires, isPriv
   if (slug) payload.slug = slug;
   const resp = await fetch(`${url}/api/pitch`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "User-Agent": UA },
     body: JSON.stringify(payload),
   });
 
   const body = await resp.json();
   if (!resp.ok) die(`submission failed: ${body.error || resp.status}`);
+  checkUpdateNotice(resp);
   return body;
 }
 
@@ -152,6 +168,7 @@ async function updatePitch(url, id, secret, stamp, markdown, title, author, expi
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
+      "User-Agent": UA,
       "X-Pitch-Secret": secret,
     },
     body: JSON.stringify({ stamp, markdown, title, author, expires, revise: !!revise }),
@@ -159,17 +176,19 @@ async function updatePitch(url, id, secret, stamp, markdown, title, author, expi
 
   const body = await resp.json();
   if (!resp.ok) die(`update failed: ${body.error || resp.status}`);
+  checkUpdateNotice(resp);
   return body;
 }
 
 async function deletePitch(url, id, secret) {
   const resp = await fetch(`${url}/api/pitch/${id}`, {
     method: "DELETE",
-    headers: { "X-Pitch-Secret": secret },
+    headers: { "User-Agent": UA, "X-Pitch-Secret": secret },
   });
 
   const body = await resp.json();
   if (!resp.ok) die(`delete failed: ${body.error || resp.status}`);
+  checkUpdateNotice(resp);
   return body;
 }
 

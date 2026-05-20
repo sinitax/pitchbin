@@ -23,6 +23,9 @@ var templateFS embed.FS
 //go:embed favicon.svg
 var faviconSVG []byte
 
+//go:embed cli/package.json
+var cliPackageJSON []byte
+
 type Server struct {
 	store             *Store
 	renderer          *Renderer
@@ -36,6 +39,7 @@ type Server struct {
 	trustedProxy      string
 	devMode           bool
 	homeHTML          string
+	cliVersion        string
 }
 
 type pitchRequest struct {
@@ -103,6 +107,11 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annota
 		})
 	}
 
+	var cliPkg struct{ Version string }
+	if err := json.Unmarshal(cliPackageJSON, &cliPkg); err != nil {
+		log.Fatalf("failed to parse cli/package.json: %v", err)
+	}
+
 	s := &Server{
 		store:             store,
 		renderer:          renderer,
@@ -116,6 +125,7 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annota
 		trustedProxy:      trustedProxy,
 		devMode:           devMode,
 		homeHTML:          homeHTML,
+		cliVersion:        cliPkg.Version,
 	}
 
 	s.mux.HandleFunc("GET /{$}", s.handleHome)
@@ -142,12 +152,21 @@ func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annota
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Check CLI version from User-Agent and notify if outdated
+	if ua := r.Header.Get("User-Agent"); strings.HasPrefix(ua, "pitchbin/") {
+		clientVer := strings.TrimPrefix(ua, "pitchbin/")
+		if clientVer != s.cliVersion {
+			w.Header().Set("X-Pitchbin-Update",
+				"update available: "+clientVer+" → "+s.cliVersion+" (npx pitchbin@latest)")
+		}
+	}
 	s.mux.ServeHTTP(w, r)
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"service": "pitchbin",
+		"service":     "pitchbin",
+		"cli_version": s.cliVersion,
 		"pow": map[string]any{
 			"algorithm":      "sha256",
 			"bits":           s.powBits,
