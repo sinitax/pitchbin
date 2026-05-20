@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf-8"));
 const VERSION = PKG.version;
+const DEFAULT_BITS = 18;
 const UA = `pitchbin/${VERSION}`;
 
 const USAGE = `Usage: pitchbin [options] <file|->
@@ -27,7 +28,7 @@ function parseArgs() {
     title: "",
     author: "",
     expires: "",
-    bits: 18,
+    bits: DEFAULT_BITS,
     slug: "",
     private: false,
     update: "",
@@ -137,11 +138,13 @@ function computeStamp(bits) {
 function checkUpdateNotice(resp) {
   const update = resp.headers.get("x-pitchbin-update");
   if (update) process.stderr.write(`notice: ${update}\n`);
+  const pow = resp.headers.get("x-pitchbin-pow-required");
+  if (pow) process.stderr.write(`notice: ${pow}\n`);
 }
 
 async function fetchInfo(url) {
   const resp = await fetch(`${url}/api/info`, {
-    headers: { "User-Agent": UA },
+    headers: { "User-Agent": UA, "X-Pitchbin-Pow-Default": String(DEFAULT_BITS) },
   });
   if (!resp.ok) die(`failed to fetch server info: ${resp.status}`);
   checkUpdateNotice(resp);
@@ -153,7 +156,7 @@ async function submit(url, stamp, markdown, title, slug, author, expires, isPriv
   if (slug) payload.slug = slug;
   const resp = await fetch(`${url}/api/pitch`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "User-Agent": UA },
+    headers: { "Content-Type": "application/json", "User-Agent": UA, "X-Pitchbin-Pow-Default": String(DEFAULT_BITS) },
     body: JSON.stringify(payload),
   });
 
@@ -168,7 +171,7 @@ async function updatePitch(url, id, secret, stamp, markdown, title, author, expi
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
-      "User-Agent": UA,
+      "User-Agent": UA, "X-Pitchbin-Pow-Default": String(DEFAULT_BITS),
       "X-Pitch-Secret": secret,
     },
     body: JSON.stringify({ stamp, markdown, title, author, expires, revise: !!revise }),
@@ -183,7 +186,7 @@ async function updatePitch(url, id, secret, stamp, markdown, title, author, expi
 async function deletePitch(url, id, secret) {
   const resp = await fetch(`${url}/api/pitch/${id}`, {
     method: "DELETE",
-    headers: { "User-Agent": UA, "X-Pitch-Secret": secret },
+    headers: { "User-Agent": UA, "X-Pitchbin-Pow-Default": String(DEFAULT_BITS), "X-Pitch-Secret": secret },
   });
 
   const body = await resp.json();

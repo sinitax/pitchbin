@@ -8,6 +8,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -158,6 +159,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if clientVer != s.cliVersion {
 			w.Header().Set("X-Pitchbin-Update",
 				"update available: "+clientVer+" → "+s.cliVersion+" (npx pitchbin@latest)")
+		}
+	}
+	// Notify if client's default PoW is below server requirement
+	if powStr := r.Header.Get("X-Pitchbin-Pow-Default"); powStr != "" {
+		if clientBits, err := strconv.Atoi(powStr); err == nil && clientBits < s.powBits {
+			w.Header().Set("X-Pitchbin-Pow-Required",
+				fmt.Sprintf("server requires %d bits, your default is %d — update your CLI", s.powBits, clientBits))
 		}
 	}
 	s.mux.ServeHTTP(w, r)
