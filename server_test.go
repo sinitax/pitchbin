@@ -482,7 +482,7 @@ func TestXSSRendering(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out, err := r.Render([]byte(tt.input))
+			out, err := r.Render([]byte(tt.input), "")
 			if err != nil {
 				t.Fatalf("render error: %v", err)
 			}
@@ -757,7 +757,7 @@ func TestFrontmatterStripping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out, err := r.Render([]byte(tt.input))
+			out, err := r.Render([]byte(tt.input), "")
 			if err != nil {
 				t.Fatalf("render error: %v", err)
 			}
@@ -802,7 +802,7 @@ func TestMarkdownExtensions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out, err := r.Render([]byte(tt.input))
+			out, err := r.Render([]byte(tt.input), "")
 			if err != nil {
 				t.Fatalf("render error: %v", err)
 			}

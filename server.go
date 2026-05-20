@@ -85,7 +85,7 @@ func (p pitchPage) RevisionList() []int {
 func NewServer(store *Store, renderer *Renderer, baseURL string, powBits, annotationPowBits, maxSize, rateLimit int, trustedProxy string, devMode bool) *Server {
 	tmpl := template.Must(template.ParseFS(templateFS, "templates/pitch.html"))
 
-	homeHTML, err := renderer.Render([]byte(homeMarkdown))
+	homeHTML, err := renderer.Render([]byte(homeMarkdown), "pitchbin")
 	if err != nil {
 		log.Fatalf("failed to render home page: %v", err)
 	}
@@ -200,7 +200,7 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Render markdown
-	html, err := s.renderer.Render([]byte(req.Markdown))
+	html, err := s.renderer.Render([]byte(req.Markdown), req.Title)
 	if err != nil {
 		log.Printf("render error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to render markdown"})
@@ -331,7 +331,11 @@ func (s *Server) handleUpdatePitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	html, err := s.renderer.Render([]byte(req.Markdown))
+	renderTitle := req.Title
+	if renderTitle == "" {
+		renderTitle = pitch.Title
+	}
+	html, err := s.renderer.Render([]byte(req.Markdown), renderTitle)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to render markdown"})
 		return
@@ -450,7 +454,7 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 
 	renderedHTML := html
 	if s.devMode {
-		if h, renderErr := s.renderer.Render([]byte(markdown)); renderErr == nil {
+		if h, renderErr := s.renderer.Render([]byte(markdown), title); renderErr == nil {
 			renderedHTML = h
 		}
 	}

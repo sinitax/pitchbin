@@ -64,12 +64,39 @@ func StripFrontmatter(markdown []byte) []byte {
 	return markdown
 }
 
-func (r *Renderer) Render(markdown []byte) (string, error) {
+func (r *Renderer) Render(markdown []byte, title string) (string, error) {
 	body := StripFrontmatter(markdown)
 	var buf bytes.Buffer
 	if err := r.md.Convert(body, &buf); err != nil {
 		return "", err
 	}
 	safe := r.policy.SanitizeBytes(buf.Bytes())
+	if title != "" {
+		return stripFirstH1(string(safe), title), nil
+	}
 	return string(safe), nil
+}
+
+// stripFirstH1 removes the leading <h1> if its text matches the page title,
+// since the title is already displayed in the page header.
+func stripFirstH1(html string, title string) string {
+	start := strings.Index(html, "<h1")
+	if start < 0 || strings.TrimSpace(html[:start]) != "" {
+		return html
+	}
+	end := strings.Index(html[start:], "</h1>")
+	if end < 0 {
+		return html
+	}
+	// Extract text content between <h1...> and </h1>
+	tagClose := strings.Index(html[start:], ">")
+	if tagClose < 0 {
+		return html
+	}
+	h1Text := strings.TrimSpace(html[start+tagClose+1 : start+end])
+	if h1Text != title {
+		return html
+	}
+	rest := html[start+end+len("</h1>"):]
+	return strings.TrimLeft(rest, "\n")
 }
