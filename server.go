@@ -479,6 +479,15 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		title, author, markdown, html, created = pitch.Title, pitch.Author, pitch.Markdown, pitch.HTML, pitch.Created
 	}
 
+	// Serve annotated markdown for non-browser clients
+	if wantsMarkdown(r) {
+		annotations, _ := s.store.GetAnnotations(id, revNum)
+		result := toCriticMarkup(markdown, annotations)
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Write([]byte(result))
+		return
+	}
+
 	renderedHTML := html
 	if s.devMode {
 		if h, renderErr := s.renderer.Render([]byte(markdown), title); renderErr == nil {

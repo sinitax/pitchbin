@@ -90,12 +90,22 @@ confirmation, PoW computation, and submission automatically.
 `
 
 func wantsMarkdown(r *http.Request) bool {
-	for _, a := range r.Header.Values("Accept") {
-		if strings.Contains(a, "text/markdown") {
-			return true
-		}
+	accept := strings.Join(r.Header.Values("Accept"), ", ")
+	if strings.Contains(accept, "text/markdown") {
+		return true
+	}
+	// Non-browser clients with an explicit Accept that excludes text/html get markdown
+	if accept != "" && !strings.Contains(accept, "text/html") && !strings.Contains(accept, "*/*") && !isBrowserUA(r.Header.Get("User-Agent")) {
+		return true
 	}
 	return false
+}
+
+func isBrowserUA(ua string) bool {
+	ua = strings.ToLower(ua)
+	return strings.Contains(ua, "mozilla") || strings.Contains(ua, "chrome") ||
+		strings.Contains(ua, "safari") || strings.Contains(ua, "edge") ||
+		strings.Contains(ua, "opera")
 }
 
 const homeID = "_home"
