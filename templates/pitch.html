@@ -694,6 +694,8 @@ footer a:hover { color: #666; }
 
       const before = text.textContent.substring(0, seg.from);
       const mid = text.textContent.substring(seg.from, seg.to);
+      // Skip whitespace-only segments (between block elements)
+      if (!mid.trim()) return;
       const after = text.textContent.substring(seg.to);
 
       const mark = document.createElement('mark');
