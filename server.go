@@ -651,8 +651,8 @@ func toCriticMarkup(markdown string, annotations []Annotation) string {
 
 	result := markdown
 	for _, m := range matches {
-		marker := "{>>" + m.author + ": " + m.comment + "<<}"
-		result = result[:m.end] + marker + result[m.end:]
+		comment := "{>>" + m.author + ": " + m.comment + "<<}"
+		result = result[:m.pos] + "{==" + result[m.pos:m.end] + "==}" + comment + result[m.end:]
 	}
 
 	return result
