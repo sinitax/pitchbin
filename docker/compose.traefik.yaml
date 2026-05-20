@@ -1,5 +1,6 @@
 services:
   pitchbin:
+    ports: !reset
     networks:
       - default
       - docker-ingress
