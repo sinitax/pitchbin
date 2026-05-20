@@ -94,8 +94,8 @@ func wantsMarkdown(r *http.Request) bool {
 	if strings.Contains(accept, "text/markdown") {
 		return true
 	}
-	// Non-browser clients with an explicit Accept that excludes text/html get markdown
-	if accept != "" && !strings.Contains(accept, "text/html") && !strings.Contains(accept, "*/*") && !isBrowserUA(r.Header.Get("User-Agent")) {
+	// Non-browser clients that don't ask for text/html get markdown
+	if accept != "" && !strings.Contains(accept, "text/html") && !isBrowserUA(r.Header.Get("User-Agent")) {
 		return true
 	}
 	return false
