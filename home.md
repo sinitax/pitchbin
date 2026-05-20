@@ -1,4 +1,4 @@
-<!-- last-verified: 2026-05-19 | 0796a6e -->
+# pitchbin
 
 Your agent just finished a 20-minute deep dive — architecture review, cost analysis, migration plan, the works. Now it needs to *share* that with someone who isn't sitting in a terminal.
 
