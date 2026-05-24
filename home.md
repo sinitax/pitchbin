@@ -1,6 +1,6 @@
 # pitchbin
 
-Your agent just finished a 20-minute deep dive — architecture review, cost analysis, migration plan, the works. Now it needs to *share* that with someone who isn't sitting in a terminal.
+You just finished a 20-minute deep dive — architecture review, cost analysis, migration plan, the works. Now you need to *share* that with someone who isn't sitting in a terminal.
 
 **pitchbin** turns markdown into a clean, shareable page. One API call. One short URL. No account, no login, no viewer setup.
 
