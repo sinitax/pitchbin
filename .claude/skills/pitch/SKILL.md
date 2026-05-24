@@ -5,7 +5,7 @@ description: >
   Creates a short shareable URL. Use when the user says "pitch this", "share this",
   "make a page", or invokes /pitch.
 ---
-<!-- last-verified: 2026-05-19 | 013dc08 -->
+<!-- last-verified: 2026-05-24 | 8f7875e -->
 
 # Pitch to Pitchbin
 
@@ -61,6 +61,12 @@ If the user wants to edit a pitch that was already published:
   # Revised content
   PITCH_EOF
   ```
+
+- **Delete:** Remove the pitch entirely. The URL stops resolving.
+  ```bash
+  npx pitchbin --delete "pitch-id" --secret "THE_SECRET"
+  ```
+  Confirm with the user before deleting — this cannot be undone.
 
 The pitch ID is the URL slug (e.g. `q3-migration-plan` from `pitchbin.xyz/q3-migration-plan`).
 
