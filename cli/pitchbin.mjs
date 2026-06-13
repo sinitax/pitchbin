@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { createHash, randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -11,10 +12,13 @@ const VERSION = PKG.version;
 const DEFAULT_BITS = 18;
 const UA = `pitchbin/${VERSION}`;
 
+const PITCH_DIR = join(homedir(), ".local", "share", "pitchbin");
+
 const USAGE = `Usage: pitchbin [options] <file|->
        pitchbin --update ID --secret SECRET <file|->
        pitchbin --revise ID --secret SECRET <file|->
-       pitchbin --delete ID --secret SECRET`
+       pitchbin --delete ID --secret SECRET
+       pitchbin --list`
 
 function die(msg) {
   process.stderr.write(`error: ${msg}\n`);
@@ -35,6 +39,7 @@ function parseArgs() {
     revise: "",
     delete: "",
     secret: "",
+    list: false,
     file: null,
   };
 
@@ -55,6 +60,7 @@ Options:
   --revise ID      Update with revision history
   --delete ID      Delete an existing pitch by ID
   --secret SECRET  Edit secret (returned on creation)
+  --list           List locally known published pitches
   -                Read markdown from stdin`);
         process.exit(0);
       case "--url": opts.url = args[++i]; break;
@@ -68,20 +74,18 @@ Options:
       case "--revise": opts.revise = args[++i]; break;
       case "--delete": opts.delete = args[++i]; break;
       case "--secret": opts.secret = args[++i]; break;
+      case "--list": case "-l": opts.list = true; break;
       default:
         if (args[i].startsWith("-") && args[i] !== "-") die(`unknown flag: ${args[i]}`);
         opts.file = args[i];
     }
   }
 
-  if (opts.delete) {
-    if (!opts.secret) die("--secret is required for --delete");
-    return opts;
-  }
+  if (opts.list) return opts;
+
+  if (opts.delete) return opts;
 
   if (!opts.file) die("missing file argument. Use - for stdin.");
-  if (opts.update && !opts.secret) die("--secret is required for --update");
-  if (opts.revise && !opts.secret) die("--secret is required for --revise");
   return opts;
 }
 
@@ -195,12 +199,67 @@ async function deletePitch(url, id, secret) {
   return body;
 }
 
+function savePitch(info) {
+  mkdirSync(PITCH_DIR, { recursive: true });
+  const file = join(PITCH_DIR, `${info.id}.json`);
+  writeFileSync(file, JSON.stringify(info, null, 2) + "\n");
+}
+
+function loadPitch(id) {
+  try {
+    return JSON.parse(readFileSync(join(PITCH_DIR, `${id}.json`), "utf-8"));
+  } catch { return null; }
+}
+
+function removePitch(id) {
+  try { unlinkSync(join(PITCH_DIR, `${id}.json`)); } catch {}
+}
+
+function listPitches() {
+  let files;
+  try { files = readdirSync(PITCH_DIR); } catch { return []; }
+  return files
+    .filter(f => f.endsWith(".json"))
+    .map(f => {
+      try { return JSON.parse(readFileSync(join(PITCH_DIR, f), "utf-8")); }
+      catch { return null; }
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.created || 0) - (a.created || 0));
+}
+
 async function main() {
   const opts = parseArgs();
 
-  // Handle delete
+  if (opts.list) {
+    const pitches = listPitches();
+    if (pitches.length === 0) {
+      process.stderr.write("no known pitches\n");
+      return;
+    }
+    for (const p of pitches) {
+      const age = p.expires_at ? ` (expires ${p.expires_at})` : "";
+      console.log(`${p.url}  ${p.title || p.id}${age}`);
+    }
+    return;
+  }
+
+  if (!opts.secret) {
+    const id = opts.update || opts.revise || opts.delete;
+    if (id) {
+      const stored = loadPitch(id);
+      if (stored?.secret) {
+        opts.secret = stored.secret;
+        process.stderr.write(`using stored secret for ${id}\n`);
+      } else {
+        die(`--secret is required (no stored secret found for ${id})`);
+      }
+    }
+  }
+
   if (opts.delete) {
     await deletePitch(opts.url, opts.delete, opts.secret);
+    removePitch(opts.delete);
     process.stderr.write("deleted\n");
     return;
   }
@@ -222,6 +281,16 @@ async function main() {
   if (opts.update || opts.revise) {
     const id = opts.update || opts.revise;
     const result = await updatePitch(opts.url, id, opts.secret, stamp, markdown, opts.title, opts.author, opts.expires, opts.revise);
+    const stored = loadPitch(id);
+    savePitch({
+      id,
+      url: result.url,
+      secret: opts.secret,
+      title: opts.title || stored?.title || "",
+      created: stored?.created || Math.floor(Date.now() / 1000),
+      updated: Math.floor(Date.now() / 1000),
+      expires_at: stored?.expires_at || null,
+    });
     console.log(result.url);
     return;
   }
@@ -243,6 +312,15 @@ async function main() {
   }
 
   const result = await submit(opts.url, stamp, markdown, opts.title, opts.slug, opts.author, opts.expires, opts.private);
+
+  savePitch({
+    id: result.id,
+    url: result.url,
+    secret: result.secret,
+    title: opts.title,
+    created: Math.floor(Date.now() / 1000),
+    expires_at: result.expires_at || null,
+  });
 
   // Output URL to stdout, secret to stderr
   console.log(result.url);
