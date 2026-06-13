@@ -52,6 +52,7 @@ type pitchRequest struct {
 	Expires  string `json:"expires"`
 	Private  bool   `json:"private"`
 	Revise   bool   `json:"revise"`
+	Readonly *bool  `json:"readonly,omitempty"`
 }
 
 type pitchResponse struct {
@@ -267,6 +268,7 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		Created:    now.Unix(),
 		Expires:    expires,
 		SecretHash: secretHash,
+		Readonly:   req.Readonly != nil && *req.Readonly,
 	}
 
 	if err := s.store.InsertPitch(pitch); err != nil {
@@ -406,6 +408,9 @@ func (s *Server) handleUpdatePitch(w http.ResponseWriter, r *http.Request) {
 	if req.Expires != "" {
 		pitch.Expires = parseExpiry(req.Expires, time.Now())
 	}
+	if req.Readonly != nil {
+		pitch.Readonly = *req.Readonly
+	}
 
 	if err := s.store.UpdatePitch(pitch); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update pitch"})
@@ -502,6 +507,17 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		expires = &t
 	}
 
+	var annotationsJSON template.JS = "[]"
+	if pitch.Readonly {
+		anns, _ := s.store.GetAnnotations(pitch.ID, revNum)
+		if anns == nil {
+			anns = []Annotation{}
+		}
+		if b, err := json.Marshal(anns); err == nil {
+			annotationsJSON = template.JS(b)
+		}
+	}
+
 	page := pitchPage{
 		Title:           title,
 		Author:          author,
@@ -513,7 +529,8 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		RawURL:          s.baseURL + "/" + pitch.ID + "/raw",
 		BaseURL:         s.baseURL,
 		PowBits:         s.annotationPowBits,
-		Readonly:        false,
+		Readonly:        pitch.Readonly,
+		AnnotationsJSON: annotationsJSON,
 		RevisionCount:   revCount,
 		CurrentRevision: revNum,
 	}
@@ -705,8 +722,17 @@ func (s *Server) handlePostAnnotation(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	sess := getSession(w, r)
 
-	if !s.store.PitchExists(id) {
+	pitch, err := s.store.GetPitch(id)
+	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if pitch.Readonly {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "pitch is readonly"})
 		return
 	}
 
@@ -790,6 +816,11 @@ func (s *Server) handleUpdateAnnotation(w http.ResponseWriter, r *http.Request) 
 
 	if a.Session != sess {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not your annotation"})
+		return
+	}
+
+	if pitch, err := s.store.GetPitch(a.PitchID); err == nil && pitch.Readonly {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "pitch is readonly"})
 		return
 	}
 

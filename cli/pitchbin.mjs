@@ -40,6 +40,7 @@ function parseArgs() {
     delete: "",
     secret: "",
     list: false,
+    readonly: null,
     file: null,
   };
 
@@ -61,6 +62,8 @@ Options:
   --delete ID      Delete an existing pitch by ID
   --secret SECRET  Edit secret (returned on creation)
   --list           List locally known published pitches
+  --readonly       Publish without allowing comments/annotations
+  --no-readonly    Re-enable comments on an existing pitch (with --update/--revise)
   -                Read markdown from stdin`);
         process.exit(0);
       case "--url": opts.url = args[++i]; break;
@@ -75,6 +78,8 @@ Options:
       case "--delete": opts.delete = args[++i]; break;
       case "--secret": opts.secret = args[++i]; break;
       case "--list": case "-l": opts.list = true; break;
+      case "--readonly": opts.readonly = true; break;
+      case "--no-readonly": opts.readonly = false; break;
       default:
         if (args[i].startsWith("-") && args[i] !== "-") die(`unknown flag: ${args[i]}`);
         opts.file = args[i];
@@ -155,9 +160,10 @@ async function fetchInfo(url) {
   return resp.json();
 }
 
-async function submit(url, stamp, markdown, title, slug, author, expires, isPrivate) {
+async function submit(url, stamp, markdown, title, slug, author, expires, isPrivate, readonly) {
   const payload = { stamp, markdown, title, author, expires, private: isPrivate };
   if (slug) payload.slug = slug;
+  if (readonly !== null) payload.readonly = readonly;
   const resp = await fetch(`${url}/api/pitch`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": UA, "X-Pitchbin-Pow-Default": String(DEFAULT_BITS) },
@@ -170,7 +176,9 @@ async function submit(url, stamp, markdown, title, slug, author, expires, isPriv
   return body;
 }
 
-async function updatePitch(url, id, secret, stamp, markdown, title, author, expires, revise) {
+async function updatePitch(url, id, secret, stamp, markdown, title, author, expires, revise, readonly) {
+  const payload = { stamp, markdown, title, author, expires, revise: !!revise };
+  if (readonly !== null) payload.readonly = readonly;
   const resp = await fetch(`${url}/api/pitch/${id}`, {
     method: "PUT",
     headers: {
@@ -178,7 +186,7 @@ async function updatePitch(url, id, secret, stamp, markdown, title, author, expi
       "User-Agent": UA, "X-Pitchbin-Pow-Default": String(DEFAULT_BITS),
       "X-Pitch-Secret": secret,
     },
-    body: JSON.stringify({ stamp, markdown, title, author, expires, revise: !!revise }),
+    body: JSON.stringify(payload),
   });
 
   const body = await resp.json();
@@ -280,7 +288,7 @@ async function main() {
   // Handle update / revise
   if (opts.update || opts.revise) {
     const id = opts.update || opts.revise;
-    const result = await updatePitch(opts.url, id, opts.secret, stamp, markdown, opts.title, opts.author, opts.expires, opts.revise);
+    const result = await updatePitch(opts.url, id, opts.secret, stamp, markdown, opts.title, opts.author, opts.expires, opts.revise, opts.readonly);
     const stored = loadPitch(id);
     savePitch({
       id,
@@ -311,7 +319,7 @@ async function main() {
     }
   }
 
-  const result = await submit(opts.url, stamp, markdown, opts.title, opts.slug, opts.author, opts.expires, opts.private);
+  const result = await submit(opts.url, stamp, markdown, opts.title, opts.slug, opts.author, opts.expires, opts.private, opts.readonly);
 
   savePitch({
     id: result.id,

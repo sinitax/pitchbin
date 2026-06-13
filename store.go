@@ -22,6 +22,7 @@ type Pitch struct {
 	Created    int64
 	Expires    int64
 	SecretHash string
+	Readonly   bool
 }
 
 type Annotation struct {
@@ -99,6 +100,11 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 
+	_, err = db.Exec(`ALTER TABLE pitches ADD COLUMN readonly INTEGER NOT NULL DEFAULT 0`)
+	if err != nil && !isAlreadyExists(err) {
+		return err
+	}
+
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS revisions (
 			id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,9 +136,9 @@ func (s *Store) Close() error {
 
 func (s *Store) InsertPitch(p *Pitch) error {
 	_, err := s.db.Exec(
-		`INSERT INTO pitches (id, title, author, markdown, html, views, created, expires, secret_hash)
-		 VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-		p.ID, p.Title, p.Author, p.Markdown, p.HTML, p.Created, p.Expires, p.SecretHash,
+		`INSERT INTO pitches (id, title, author, markdown, html, views, created, expires, secret_hash, readonly)
+		 VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+		p.ID, p.Title, p.Author, p.Markdown, p.HTML, p.Created, p.Expires, p.SecretHash, p.Readonly,
 	)
 	return err
 }
@@ -140,8 +146,8 @@ func (s *Store) InsertPitch(p *Pitch) error {
 func (s *Store) GetPitch(id string) (*Pitch, error) {
 	p := &Pitch{}
 	err := s.db.QueryRow(
-		`SELECT id, title, author, markdown, html, views, created, expires, secret_hash FROM pitches WHERE id = ?`, id,
-	).Scan(&p.ID, &p.Title, &p.Author, &p.Markdown, &p.HTML, &p.Views, &p.Created, &p.Expires, &p.SecretHash)
+		`SELECT id, title, author, markdown, html, views, created, expires, secret_hash, readonly FROM pitches WHERE id = ?`, id,
+	).Scan(&p.ID, &p.Title, &p.Author, &p.Markdown, &p.HTML, &p.Views, &p.Created, &p.Expires, &p.SecretHash, &p.Readonly)
 	if err != nil {
 		return nil, err
 	}
@@ -187,8 +193,8 @@ func (s *Store) GetRevisionCount(pitchID string) (int, error) {
 
 func (s *Store) UpdatePitch(p *Pitch) error {
 	_, err := s.db.Exec(
-		`UPDATE pitches SET title = ?, author = ?, markdown = ?, html = ?, expires = ? WHERE id = ?`,
-		p.Title, p.Author, p.Markdown, p.HTML, p.Expires, p.ID,
+		`UPDATE pitches SET title = ?, author = ?, markdown = ?, html = ?, expires = ?, readonly = ? WHERE id = ?`,
+		p.Title, p.Author, p.Markdown, p.HTML, p.Expires, p.Readonly, p.ID,
 	)
 	return err
 }
