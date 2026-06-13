@@ -924,8 +924,14 @@ footer a:hover { color: #666; }
         });
         card.addEventListener('click', function(e) {
           if (e.target.classList.contains('ann-delete')) return;
-          history.replaceState(null, '', '#' + a.id);
-          scrollToAnnotation(a.id);
+          if (card.querySelector('.ann-edit-form')) return;
+          if (READONLY) {
+            history.replaceState(null, '', '#' + a.id);
+            scrollToAnnotation(a.id);
+            return;
+          }
+          const focusTarget = e.target.classList.contains('ann-author') ? 'author' : 'comment';
+          editAnnotation(card, a, focusTarget);
         });
       } else if (!a._pending && !a._submitting) {
         card.addEventListener('click', function() {
