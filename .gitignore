@@ -4,3 +4,4 @@ pitchbin
 *.db-shm
 docker/compose.override.yaml
 docker/.env
+.agents/CONTEXT.md
